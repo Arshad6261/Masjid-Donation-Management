@@ -1,0 +1,13 @@
+{
+  "name": "Hazrat Sultan Sha Peer",
+  "short_name": "HSP Masjid",
+  "description": "Donation Management System for Hazrat Sultan Sha Peer Masjid & Dargah",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#1B6B3A",
+  "background_color": "#F5F0E8",
+  "icons": [
+    { "src": "/assets/dargah.jpg", "sizes": "192x192", "type": "image/jpeg" },
+    { "src": "/assets/dargah.jpg", "sizes": "512x512", "type": "image/jpeg" }
+  ]
+}
