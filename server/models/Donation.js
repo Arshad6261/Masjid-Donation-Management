@@ -13,7 +13,13 @@ const donationSchema = new mongoose.Schema({
   collectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   collectionMethod: { type: String, enum: ['house_visit', 'walk_in', 'bank_transfer'], default: 'walk_in' },
   notes: { type: String },
-  receiptPrinted: { type: Boolean, default: false }
+  receiptPrinted: { type: Boolean, default: false },
+  
+  // Feature 2: Advance Donation Fields
+  isAdvance: { type: Boolean, default: false },
+  advanceGroupId: { type: String }, // To link multiple receipts together
+  totalMonths: { type: Number, default: 1 },
+  batchIndex: { type: Number, default: 1 } // e.g. 1 of 5
 }, { timestamps: true });
 
 donationSchema.pre('save', async function() {

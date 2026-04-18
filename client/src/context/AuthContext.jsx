@@ -35,8 +35,16 @@ export const AuthProvider = ({ children }) => {
     toast.success('लॉगआउट सफल');
   };
 
+  const updateUser = (data) => {
+    setUser((prev) => {
+      const updated = { ...prev, ...data };
+      localStorage.setItem('userInfo', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser, loading }}>
       {!loading && children}
     </AuthContext.Provider>
   );

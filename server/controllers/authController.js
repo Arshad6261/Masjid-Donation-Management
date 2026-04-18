@@ -74,3 +74,71 @@ export const getUserProfile = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// @desc    Update user profile
+// @route   PUT /api/auth/profile
+// @access  Private
+export const updateProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    user.name = req.body.name || user.name;
+    if (req.body.phone) {
+      user.phone = req.body.phone;
+    }
+
+    const updatedUser = await user.save();
+    res.json({
+      _id: updatedUser._id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      phone: updatedUser.phone,
+      role: updatedUser.role,
+      assignedAreas: updatedUser.assignedAreas,
+      createdAt: updatedUser.createdAt,
+      isActive: updatedUser.isActive,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Change user password
+// @route   PUT /api/auth/change-password
+// @access  Private
+export const updatePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+    
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters long' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: 'Passwords do not match' });
+    }
+    
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    if (!(await user.matchPassword(currentPassword))) {
+      return res.status(400).json({ message: 'Incorrect current password' });
+    }
+    
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ message: 'New password must be different' });
+    }
+    
+    user.password = newPassword;
+    await user.save();
+    
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

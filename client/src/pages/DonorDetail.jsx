@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../api/axios';
-import { useForm } from 'react-hook-form';
+import { useAuth } from '../context/AuthContext';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import ReceiptModal from '../components/ReceiptModal';
+import AreaInput from '../components/AreaInput';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Calendar, CheckCircle, AlertCircle, TrendingUp, Percent } from 'lucide-react';
@@ -28,6 +31,7 @@ export default function DonorDetail() {
   const [ledgerYear, setLedgerYear] = useState(parseInt(searchParams.get('year')) || new Date().getFullYear());
   const [markPayModal, setMarkPayModal] = useState(null);
   const [markAmount, setMarkAmount] = useState(0);
+  const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [markNotes, setMarkNotes] = useState('');
 
   const { data: donor, isLoading } = useQuery({
@@ -48,7 +52,7 @@ export default function DonorDetail() {
     enabled: !isNew && activeTab === 'ledger'
   });
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+  const { register, handleSubmit, reset, control, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
     defaultValues: { address: { houseNo: '', street: '' }, fundType: 'masjid', isActive: true, monthlyAmount: 0 }
   });
@@ -148,8 +152,17 @@ export default function DonorDetail() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">क्षेत्र *</label>
-                  <input type="text" {...register('area')} className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-dargah-green/30" />
-                  {errors.area && <p className="text-sm text-red-500 mt-1">{errors.area.message}</p>}
+                  <Controller
+                    control={control}
+                    name="area"
+                    render={({ field: { onChange, value } }) => (
+                      <AreaInput 
+                        value={value} 
+                        onChange={onChange} 
+                        error={errors.area?.message}
+                      />
+                    )}
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -195,18 +208,30 @@ export default function DonorDetail() {
               <h3 className="text-lg font-bold text-slate-800 mb-4">चंदा इतिहास</h3>
               <div className="space-y-2">
                 {history?.length === 0 ? <p className="text-slate-500 text-center py-4">अभी तक कोई चंदा नहीं।</p> : history?.map(d => (
-                  <div key={d._id} className="flex justify-between items-center py-3 border-b border-slate-50">
+                  <div key={d._id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 border-b border-slate-50 gap-2 sm:gap-0">
                     <div>
                       <p className="font-medium text-slate-800">{d.receiptNo}</p>
                       <p className="text-xs text-slate-500">{new Date(d.paymentDate).toLocaleDateString('hi-IN')} · {d.collectedBy?.name}</p>
                     </div>
-                    <span className="font-bold text-dargah-green">₹{d.amount}</span>
+                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                      <span className="font-bold text-dargah-green text-lg">₹{d.amount}</span>
+                      <button 
+                        onClick={() => setSelectedReceipt(d)}
+                        className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-1 font-semibold transition-colors"
+                      >
+                        🧾 रसीद (Receipt)
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
         </>
+      )}
+
+      {selectedReceipt && (
+        <ReceiptModal donation={selectedReceipt} onClose={() => setSelectedReceipt(null)} />
       )}
 
       {/* LEDGER TAB */}

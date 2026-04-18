@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../api/axios';
 import { useNavigate } from 'react-router-dom';
 import { Map, Plus, CheckCircle, Clock, Calendar } from 'lucide-react';
+import AreaInput from '../components/AreaInput';
 import toast from 'react-hot-toast';
 
 export default function Visits() {
@@ -112,9 +113,11 @@ export default function Visits() {
             <form onSubmit={(e) => { e.preventDefault(); if (!newArea) return toast.error('क्षेत्र डालें'); mutation.mutate({ area: newArea, visitDate: newDate }); }} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">क्षेत्र का नाम *</label>
-                <input type="text" value={newArea} onChange={(e) => setNewArea(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-dargah-green/30 outline-none"
-                  placeholder="जैसे सुल्तान नगर" autoFocus />
+                <AreaInput 
+                  value={newArea} 
+                  onChange={setNewArea} 
+                  placeholder="जैसे सुल्तान नगर"
+                />
                 <p className="text-xs text-slate-500 mt-1">इस क्षेत्र के सक्रिय दानदाता स्वतः जुड़ जाएंगे।</p>
               </div>
               <div>

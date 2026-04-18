@@ -24,6 +24,17 @@ export const getDonors = async (req, res) => {
   }
 };
 
+// @desc    Get all distinct areas from donors
+// @route   GET /api/donors/areas
+export const getDonorAreas = async (req, res) => {
+  try {
+    const areas = await Donor.distinct('area');
+    res.json(areas.sort());
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Create a donor
 export const createDonor = async (req, res) => {
   try {

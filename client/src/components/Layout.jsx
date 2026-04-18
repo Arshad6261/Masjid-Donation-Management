@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import api from '../api/axios';
+import NotificationPanel from './NotificationPanel';
 import { useAuth } from '../context/AuthContext';
 import { 
   LayoutDashboard, Users, Receipt, Wallet, 
-  Map, BarChart, LogOut, Bell, Menu, Settings, X
+  Map, BarChart, LogOut, Bell, Menu, Settings, X, User, Search
 } from 'lucide-react';
 
 const getNavItems = (role) => {
   const items = [
     { name: 'डैशबोर्ड', path: '/dashboard', icon: LayoutDashboard },
     { name: 'दानदाता', path: '/donors', icon: Users },
+    { name: 'खोजें', path: '/receipts/search', icon: Search },
     { name: 'चंदा', path: '/donations', icon: Receipt },
   ];
   if (role === 'admin') {
@@ -20,6 +24,7 @@ const getNavItems = (role) => {
   if (role === 'admin') {
     items.push({ name: 'सेटिंग्स', path: '/settings', icon: Settings });
   }
+  items.push({ name: 'प्रोफ़ाइल', path: '/profile', icon: User });
   return items;
 };
 
@@ -29,6 +34,25 @@ export default function Layout() {
   const location = useLocation();
   const navItems = getNavItems(user?.role);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const { data: freezeStatus } = useQuery({
+    queryKey: ['freezeStatus'],
+    queryFn: async () => {
+      const res = await api.get('/admin/freeze-status');
+      return res.data;
+    },
+    refetchInterval: 60000 // Poll every 60s
+  });
+
+  const { data: unreadCountObj } = useQuery({
+    queryKey: ['unreadCount'],
+    queryFn: async () => {
+      const res = await api.get('/notifications/unread-count');
+      return res.data;
+    },
+    refetchInterval: 60000 // Poll every 60s
+  });
 
   // Close menu on route change
   useEffect(() => { setMobileMenuOpen(false); }, [location.pathname]);
@@ -111,6 +135,16 @@ export default function Layout() {
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
+        
+        {/* Global Freeze Banner */}
+        {freezeStatus?.isFrozen && user?.role === 'member' && (
+          <div className="bg-red-50 border-b border-red-200 text-red-800 text-sm px-4 py-2 text-center shadow-sm w-full z-20 font-medium">
+            <span className="mr-2">⚠</span>
+            दान ऑपरेशन वर्तमान में प्रशासक द्वारा रोक (Freeze) दिए गए हैं · {freezeStatus.reason || 'सिस्टम ऑडिट'} 
+            {freezeStatus.frozenAt && ` · ${new Date(freezeStatus.frozenAt).toLocaleDateString('hi-IN')}`}
+          </div>
+        )}
+
         {/* Mobile Header */}
         <header className="md:hidden sticky top-0 z-10 shadow-md px-4 py-3 flex items-center justify-between"
           style={{ background: 'linear-gradient(135deg, #0F4C2A 0%, #1B6B3A 72%, #C9900C 100%)' }}>
@@ -122,13 +156,20 @@ export default function Layout() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button className="text-white/70 hover:text-white relative">
-              <Bell className="w-6 h-6" />
-              <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
-            </button>
-            <div className="w-8 h-8 rounded-full bg-white/20 text-white flex items-center justify-center font-bold text-sm border border-white/30">
-              {user?.name?.charAt(0)}
+            <div className="relative">
+              <button onClick={() => setShowNotifications(!showNotifications)} className="text-white/70 hover:text-white relative p-1 mt-1">
+                <Bell className="w-6 h-6" />
+                {unreadCountObj?.count > 0 && (
+                  <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border border-dargah-green flex items-center justify-center text-[8px] font-bold text-white">
+                    {unreadCountObj.count > 9 ? '9+' : unreadCountObj.count}
+                  </span>
+                )}
+              </button>
+              {showNotifications && <NotificationPanel onClose={() => setShowNotifications(false)} />}
             </div>
+            <NavLink to="/profile" className="w-8 h-8 rounded-full bg-white/20 text-white flex items-center justify-center font-bold text-sm border border-white/30 cursor-pointer hover:bg-white/30 transition-colors">
+              {user?.name?.charAt(0)}
+            </NavLink>
           </div>
         </header>
 
@@ -146,9 +187,17 @@ export default function Layout() {
                 ))}
               </div>
             )}
-            <button className="text-white/70 hover:text-white relative">
-              <Bell className="w-5 h-5" />
-            </button>
+            <div className="relative">
+              <button onClick={() => setShowNotifications(!showNotifications)} className="text-white/70 hover:text-white relative mt-1">
+                <Bell className="w-5 h-5" />
+                {unreadCountObj?.count > 0 && (
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border border-dargah-green flex items-center justify-center text-[9px] font-bold text-white">
+                    {unreadCountObj.count > 9 ? '9+' : unreadCountObj.count}
+                  </span>
+                )}
+              </button>
+              {showNotifications && <NotificationPanel onClose={() => setShowNotifications(false)} />}
+            </div>
           </div>
         </header>
 

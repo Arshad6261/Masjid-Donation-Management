@@ -39,6 +39,60 @@ export const createDonation = async (req, res) => {
   }
 };
 
+// @desc    Create advance donation (multiple months)
+// @route   POST /api/donations/advance
+export const createAdvanceDonation = async (req, res) => {
+  try {
+    const { donor, monthlyAmount, fundType, startMonth, startYear, totalMonths, collectionMethod, notes } = req.body;
+    
+    if (totalMonths < 2 || totalMonths > 12) {
+      return res.status(400).json({ message: 'Advance donations must be between 2 and 12 months' });
+    }
+
+    const advanceGroupId = `ADV_${Date.now()}`;
+    const createdDonations = [];
+    
+    let currentMonth = parseInt(startMonth);
+    let currentYear = parseInt(startYear);
+
+    // Save sequentially to trigger the pre-save hook for receipt numbers
+    for (let i = 1; i <= totalMonths; i++) {
+      const donation = new Donation({
+        donor,
+        amount: monthlyAmount,
+        fundType,
+        month: currentMonth,
+        year: currentYear,
+        paymentDate: new Date(),
+        collectedBy: req.user._id,
+        collectionMethod,
+        notes: notes ? `${notes} (Advance)` : `Advance payment`,
+        isAdvance: true,
+        advanceGroupId,
+        totalMonths,
+        batchIndex: i
+      });
+      
+      const saved = await donation.save();
+      createdDonations.push(saved);
+
+      currentMonth++;
+      if (currentMonth > 12) {
+          currentMonth = 1;
+          currentYear++;
+      }
+    }
+
+    res.status(201).json({ 
+      message: 'Advance donations created successfully', 
+      groupId: advanceGroupId,
+      donations: createdDonations 
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Get donation by ID
 // @route   GET /api/donations/:id
 export const getDonationById = async (req, res) => {
@@ -51,6 +105,46 @@ export const getDonationById = async (req, res) => {
     } else {
       res.status(404).json({ message: 'Donation not found' });
     }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Search donations
+// @route   GET /api/donations/search?q=
+export const searchDonations = async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.json([]);
+
+    // We search by receiptNo (if starts with RCP-), otherwise by Donor phone, Donor Name
+    // This requires populating first or searching Donor collection first.
+    let donations = [];
+
+    if (q.toUpperCase().startsWith('RCP-')) {
+      donations = await Donation.find({ receiptNo: { $regex: new RegExp(q, 'i') } })
+        .populate('donor')
+        .populate('collectedBy', 'name')
+        .limit(20);
+    } else {
+      // Find donors matching q
+      const donors = await Donor.find({
+        $or: [
+          { name: { $regex: new RegExp(q, 'i') } },
+          { phone: { $regex: new RegExp(q, 'i') } }
+        ]
+      }).select('_id');
+
+      const donorIds = donors.map(d => d._id);
+
+      donations = await Donation.find({ donor: { $in: donorIds } })
+        .populate('donor')
+        .populate('collectedBy', 'name')
+        .sort({ paymentDate: -1 })
+        .limit(30);
+    }
+
+    res.json(donations);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

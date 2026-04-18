@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
-import { Users, Plus, X, Shield, MapPin } from 'lucide-react';
+import { Users, Plus, X, Shield, MapPin, Power, PowerOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const AREAS = ['Qasim Nagar', 'Sultan Nagar', 'Peer Colony', 'Shah Gali', 'Dargah Road', 'Masjid Lane'];
@@ -13,6 +13,13 @@ export default function SettingsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', assignedAreas: [], role: 'member' });
+  const [freezeReason, setFreezeReason] = useState('');
+
+  const { data: freezeStatus } = useQuery({
+    queryKey: ['freezeStatus'],
+    queryFn: async () => { const { data } = await api.get('/admin/freeze-status'); return data; },
+    enabled: user?.role === 'admin'
+  });
 
   const { data: members } = useQuery({
     queryKey: ['users'],
@@ -38,6 +45,25 @@ export default function SettingsPage() {
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...data }) => await api.put(`/users/${id}`, data),
     onSuccess: () => { queryClient.invalidateQueries(['users']); toast.success('अपडेट हुआ'); setEditUser(null); setShowModal(false); },
+    onError: (e) => toast.error(e.response?.data?.message || 'त्रुटि')
+  });
+
+  const freezeMutation = useMutation({
+    mutationFn: async (reason) => await api.post('/admin/freeze-donations', { reason }),
+    onSuccess: () => { 
+      queryClient.invalidateQueries(['freezeStatus']); 
+      toast.success('सिस्टम फ्रीज किया गया'); 
+      setFreezeReason('');
+    },
+    onError: (e) => toast.error(e.response?.data?.message || 'त्रुटि')
+  });
+
+  const unfreezeMutation = useMutation({
+    mutationFn: async () => await api.post('/admin/unfreeze-donations'),
+    onSuccess: () => { 
+      queryClient.invalidateQueries(['freezeStatus']); 
+      toast.success('सिस्टम अनफ्रीज किया गया'); 
+    },
     onError: (e) => toast.error(e.response?.data?.message || 'त्रुटि')
   });
 
@@ -88,6 +114,61 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
+      
+      {/* System Controls */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <Shield className="w-5 h-5 text-slate-600" />
+            सिस्टम नियंत्रण (System Controls)
+          </h3>
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${freezeStatus?.isFrozen ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+            {freezeStatus?.isFrozen ? 'FROZEN' : 'ACTIVE'}
+          </span>
+        </div>
+        <div className="p-6">
+          <p className="text-sm text-slate-600 mb-4">
+            सिस्टम फ्रीज करने पर समिति के सदस्य कोई नई रसीद या चंदा नहीं जोड़ पाएंगे। इसे व्यवस्थापन या ऑडिट के समय उपयोग करें।
+          </p>
+          
+          {freezeStatus?.isFrozen ? (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+              <div>
+                <h4 className="font-bold text-red-800">सिस्टम अभी फ्रीज है (System is Frozen)</h4>
+                <p className="text-sm text-red-600 mt-1">कारण: {freezeStatus.reason || 'N/A'}</p>
+                <p className="text-xs text-red-500 mt-1">तिथि: {freezeStatus.frozenAt ? new Date(freezeStatus.frozenAt).toLocaleString('hi-IN') : 'N/A'}</p>
+              </div>
+              <button 
+                onClick={() => unfreezeMutation.mutate()}
+                disabled={unfreezeMutation.isPending}
+                className="flex items-center gap-2 bg-white text-green-600 border border-green-600 hover:bg-green-50 px-4 py-2 rounded-xl font-medium transition-colors"
+              >
+                <Power className="w-5 h-5" /> अनफ्रीज करें
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-4">
+              <input 
+                type="text" 
+                value={freezeReason}
+                onChange={(e) => setFreezeReason(e.target.value)}
+                placeholder="फ्रीज करने का कारण दर्ज करें..." 
+                className="flex-1 px-4 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+              />
+              <button 
+                onClick={() => freezeMutation.mutate(freezeReason)}
+                disabled={freezeMutation.isPending}
+                className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-medium transition-colors whitespace-nowrap"
+              >
+                <PowerOff className="w-5 h-5" /> फ्रीज करें
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <hr className="border-slate-200" />
+
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-bold text-slate-800">कमेटी सदस्य</h2>
         <button onClick={openAdd} className="flex items-center gap-2 text-white px-4 py-2 rounded-xl font-medium shadow-sm" style={{ background: 'linear-gradient(135deg, #0F4C2A, #1B6B3A)' }}>

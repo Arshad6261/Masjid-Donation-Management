@@ -14,6 +14,8 @@ import Visits from './pages/Visits';
 import VisitDetail from './pages/VisitDetail';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
+import Profile from './pages/Profile';
+import ReceiptSearch from './pages/ReceiptSearch';
 import Layout from './components/Layout';
 
 const ProtectedRoute = ({ children }) => {
@@ -34,12 +36,14 @@ function App() {
         <Route path="donations" element={<Donations />} />
         <Route path="donations/new" element={<AddDonation />} />
         <Route path="receipt/:id" element={<Receipt />} />
+        <Route path="receipts/search" element={<ReceiptSearch />} />
         <Route path="expenditures" element={<Expenditures />} />
         <Route path="expenditures/new" element={<AddExpenditure />} />
         <Route path="visits" element={<Visits />} />
         <Route path="visits/:id" element={<VisitDetail />} />
         <Route path="reports" element={<Reports />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="profile" element={<Profile />} />
       </Route>
     </Routes>
   );

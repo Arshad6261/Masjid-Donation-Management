@@ -27,6 +27,9 @@ export default function AddDonation() {
   const [pos, setPos] = useState({});
   const inputRef = useRef(null);
 
+  const [donationMode, setDonationMode] = useState('standard');
+  const [totalMonths, setTotalMonths] = useState(2);
+
   const { data: donorsSearch } = useQuery({
     queryKey: ['donors', searchTerm],
     queryFn: async () => {
@@ -56,22 +59,45 @@ export default function AddDonation() {
 
   const mutation = useMutation({
     mutationFn: async (data) => {
-      return await api.post('/donations', {
+      const basePayload = {
         ...data,
         month: new Date().getMonth() + 1,
         year: new Date().getFullYear(),
-      });
+      };
+
+      if (donationMode === 'advance') {
+        return await api.post('/donations/advance', {
+          donor: data.donor,
+          monthlyAmount: data.amount,
+          fundType: data.fundType,
+          festivalName: data.festivalName,
+          startMonth: basePayload.month,
+          startYear: basePayload.year,
+          totalMonths,
+          collectionMethod: data.collectionMethod,
+          notes: data.notes
+        });
+      } else {
+        return await api.post('/donations', basePayload);
+      }
     },
     onSuccess: (res) => {
       reset();
       setSelectedDonor(null);
       setSearchTerm('');
       setSuggestions([]);
-      toast.success(`चंदा सेव हुआ · ${res.data.receiptNo}`);
-      queryClient.invalidateQueries(['donations']);
-      navigate(`/receipt/${res.data.receiptNo}`);
+      
+      if (donationMode === 'advance') {
+        toast.success(`अग्रिम चंदा सेव हुआ (${res.data.donations.length} महीने)`);
+        queryClient.invalidateQueries(['donations']);
+        navigate(`/receipt/${res.data.donations[0].receiptNo}`);
+      } else {
+        toast.success(`चंदा सेव हुआ · ${res.data.receiptNo}`);
+        queryClient.invalidateQueries(['donations']);
+        navigate(`/receipt/${res.data.receiptNo}`);
+      }
     },
-    onError: () => toast.error('चंदा बनाने में त्रुटि')
+    onError: (err) => toast.error(err.response?.data?.message || 'चंदा बनाने में त्रुटि')
   });
 
   const handleSelectDonor = (donor) => {
@@ -137,14 +163,34 @@ export default function AddDonation() {
         )}
 
         {selectedDonor ? (
-          <div className="bg-dargah-cream border border-dargah-gold/30 p-4 rounded-xl mb-8 flex justify-between items-center">
-            <div>
-              <p className="font-bold text-dargah-green-dark">{selectedDonor.name}</p>
-              <p className="text-sm text-dargah-teal">{selectedDonor.donorId} · {selectedDonor.area}</p>
+          <div className="bg-dargah-cream border border-dargah-gold/30 p-4 rounded-xl mb-8 flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="font-bold text-dargah-green-dark">{selectedDonor.name}</p>
+                <p className="text-sm text-dargah-teal">{selectedDonor.donorId} · {selectedDonor.area}</p>
+              </div>
+              <button type="button" onClick={() => { setSelectedDonor(null); setValue('donor', ''); }} className="text-sm text-red-600 font-medium px-3 py-1 bg-white rounded-lg hover:bg-slate-50">
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <button onClick={() => { setSelectedDonor(null); setValue('donor', ''); }} className="text-sm text-red-600 font-medium px-3 py-1 bg-white rounded-lg">
-              <X className="w-4 h-4" />
-            </button>
+            
+            {/* Split Control for Mode */}
+            <div className="flex bg-white/50 p-1 rounded-xl border border-dargah-gold/20">
+              <button
+                type="button"
+                onClick={() => setDonationMode('standard')}
+                className={`flex-1 py-1.5 text-sm font-bold transition-all rounded-lg ${donationMode === 'standard' ? 'bg-dargah-green text-white shadow-sm' : 'text-slate-600 hover:text-dargah-green'}`}
+              >
+                1 माह (Standard)
+              </button>
+              <button
+                type="button"
+                onClick={() => setDonationMode('advance')}
+                className={`flex-1 py-1.5 text-sm font-bold transition-all rounded-lg ${donationMode === 'advance' ? 'bg-dargah-green text-white shadow-sm' : 'text-slate-600 hover:text-dargah-green'}`}
+              >
+                अग्रिम (Advance)
+              </button>
+            </div>
           </div>
         ) : (
           <div className="p-4 mb-8 bg-amber-50 text-amber-700 text-sm rounded-xl border border-amber-200">
@@ -158,10 +204,24 @@ export default function AddDonation() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">राशि (₹) *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">राशि (₹) {donationMode === 'advance' ? 'प्रति माह' : ''} *</label>
               <input type="number" {...register('amount', { valueAsNumber: true })} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green/30 outline-none text-xl font-bold text-slate-900" />
               {errors.amount && <p className="text-sm text-red-500 mt-1">{errors.amount.message}</p>}
             </div>
+            
+            {donationMode === 'advance' && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">कुल महीने (2-12) *</label>
+                <input 
+                  type="number" 
+                  min="2" 
+                  max="12" 
+                  value={totalMonths}
+                  onChange={(e) => setTotalMonths(Number(e.target.value))}
+                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green/30 outline-none font-bold text-slate-900" 
+                />
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">फंड प्रकार *</label>
               <select {...register('fundType')} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green/30 outline-none">
