@@ -50,14 +50,23 @@ export const updateUser = async (req, res) => {
   }
 };
 
-// @desc    Soft delete user
+// @desc    Remove/deactivate committee member
+// @route   DELETE /api/users/:id
 export const deleteUser = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    user.isActive = false;
-    await user.save();
-    res.json({ message: 'User deactivated' });
+    
+    const donationCount = await Donation.countDocuments({ collectedBy: user._id });
+    
+    if (donationCount > 0) {
+      user.isActive = false;
+      await user.save();
+      return res.json({ deactivated: true, donationCount });
+    } else {
+      await user.deleteOne();
+      return res.json({ deleted: true });
+    }
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

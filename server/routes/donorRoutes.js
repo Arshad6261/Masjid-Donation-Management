@@ -1,15 +1,20 @@
 import express from 'express';
-import { getDonors, createDonor, getDonorById, updateDonor, deleteDonor, getDonorDonationHistory, getDonorYearlyLedger, getDonorAreas } from '../controllers/donorController.js';
+import { getDonors, createDonor, getDonorById, updateDonor, deleteDonor, getDonorDonationHistory, getDonorYearlyLedger, getDonorAreas, selfRegister, generateQRCode, approveDonor, rejectDonor } from '../controllers/donorController.js';
 import { protect, admin } from '../middleware/authMiddleware.js';
 import { scopeToArea } from '../middleware/areaScope.js';
 
 const router = express.Router();
 
+router.post('/self-register', selfRegister);
+router.get('/areas', getDonorAreas);
+router.get('/qr-code', protect, admin, generateQRCode);
+
 router.route('/')
   .get(protect, scopeToArea, getDonors)
   .post(protect, createDonor);
 
-router.get('/areas', protect, getDonorAreas);
+router.patch('/:id/approve', protect, admin, approveDonor);
+router.patch('/:id/reject', protect, admin, rejectDonor);
 
 router.route('/:id')
   .get(protect, getDonorById)

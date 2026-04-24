@@ -1,6 +1,6 @@
 import express from 'express';
 import { 
-  getDonations, createDonation, createAdvanceDonation, getDonationById, updateDonation, deleteDonation, getDonationByReceipt, getMonthlySummary, searchDonations 
+  getDonations, createDonation, createAdvanceDonation, getDonationById, updateDonation, deleteDonation, getDonationByReceipt, getMonthlySummary, searchDonations, getFestivals 
 } from '../controllers/donationController.js';
 import { protect, admin } from '../middleware/authMiddleware.js';
 import { checkDonationFreeze } from '../middleware/freezeCheck.js';
@@ -13,6 +13,7 @@ router.route('/')
 
 router.post('/advance', protect, checkDonationFreeze, createAdvanceDonation);
 
+router.get('/festivals', protect, getFestivals);
 router.get('/search', protect, searchDonations);
 router.get('/monthly-summary', protect, getMonthlySummary);
 router.get('/receipt/:receiptNo', protect, getDonationByReceipt);

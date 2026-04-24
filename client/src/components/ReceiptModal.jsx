@@ -18,6 +18,8 @@ export default function ReceiptModal({ donation, onClose }) {
 
   const whatsappLink = getWhatsAppLink(donation.donor, donation);
 
+  const donorName = donation.donor?.name || donation.donorName || donation.walkInDonorName || 'गुमनाम';
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white" onMouseDown={onClose}>
       
@@ -97,7 +99,7 @@ export default function ReceiptModal({ donation, onClose }) {
           {/* Body */}
           <div className="mb-10 sm:mb-12 leading-loose text-base sm:text-lg text-slate-800 text-center sm:text-left">
             <p>
-              <span className="font-bold border-b border-dotted border-slate-400 px-2 uppercase">{donation.donor?.name || 'गुमनाम'}</span> 
+              <span className="font-bold border-b border-dotted border-slate-400 px-2 uppercase">{donorName}</span> 
               {' '}से धन्यवाद सहित प्राप्त हुआ
               <br className="hidden sm:block" />
               निवासी <span className="italic border-b border-dotted border-slate-400 px-2">{donation.donor?.area || '-'}</span> 

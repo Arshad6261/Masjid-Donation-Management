@@ -21,7 +21,9 @@ const getNavItems = (role) => {
   }
   items.push({ name: 'दौरे', path: '/visits', icon: Map });
   items.push({ name: 'रिपोर्ट', path: '/reports', icon: BarChart });
+  items.push({ name: 'त्यौहार फंड', path: '/festival-fund', icon: Wallet });
   if (role === 'admin') {
+    items.push({ name: 'जुम्मा झोली', path: '/jumma-tholi', icon: Wallet });
     items.push({ name: 'सेटिंग्स', path: '/settings', icon: Settings });
   }
   items.push({ name: 'प्रोफ़ाइल', path: '/profile', icon: User });
@@ -167,9 +169,9 @@ export default function Layout() {
               </button>
               {showNotifications && <NotificationPanel onClose={() => setShowNotifications(false)} />}
             </div>
-            <NavLink to="/profile" className="w-8 h-8 rounded-full bg-white/20 text-white flex items-center justify-center font-bold text-sm border border-white/30 cursor-pointer hover:bg-white/30 transition-colors">
-              {user?.name?.charAt(0)}
-            </NavLink>
+            <button onClick={handleLogout} className="text-white/70 hover:text-white p-1 ml-1" aria-label="Logout">
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </header>
 

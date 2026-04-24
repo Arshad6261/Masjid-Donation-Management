@@ -239,3 +239,92 @@ export const getYearlyReport = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// @desc    Get festival summary
+// @route   GET /api/reports/festival-summary
+export const getFestivalSummary = async (req, res) => {
+  try {
+    const donations = await Donation.aggregate([
+      { $match: { fundType: 'festival', festivalName: { $exists: true, $ne: '' } } },
+      { $group: { 
+          _id: { festivalName: '$festivalName', year: '$year' }, 
+          totalDonations: { $sum: '$amount' },
+          donationCount: { $sum: 1 }
+      }}
+    ]);
+
+    const expenses = await Expenditure.aggregate([
+      { $match: { fundType: 'festival', festivalName: { $exists: true, $ne: '' } } },
+      { $addFields: { year: { $year: '$expenseDate' } } },
+      { $group: {
+          _id: { festivalName: '$festivalName', year: '$year' },
+          totalExpenses: { $sum: '$amount' }
+      }}
+    ]);
+
+    const resultMap = new Map();
+
+    donations.forEach(d => {
+      const key = `${d._id.festivalName}-${d._id.year}`;
+      resultMap.set(key, {
+        festivalName: d._id.festivalName,
+        year: d._id.year,
+        totalDonations: d.totalDonations,
+        totalExpenses: 0,
+        donationCount: d.donationCount,
+        balance: d.totalDonations
+      });
+    });
+
+    expenses.forEach(e => {
+      const key = `${e._id.festivalName}-${e._id.year}`;
+      if (resultMap.has(key)) {
+        const item = resultMap.get(key);
+        item.totalExpenses = e.totalExpenses;
+        item.balance = item.totalDonations - e.totalExpenses;
+      } else {
+        resultMap.set(key, {
+          festivalName: e._id.festivalName,
+          year: e._id.year,
+          totalDonations: 0,
+          totalExpenses: e.totalExpenses,
+          donationCount: 0,
+          balance: -e.totalExpenses
+        });
+      }
+    });
+
+    const results = Array.from(resultMap.values()).sort((a, b) => {
+      if (b.year !== a.year) return b.year - a.year;
+      return a.festivalName.localeCompare(b.festivalName);
+    });
+
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get collector stats (Leaderboard)
+// @route   GET /api/reports/collector-stats
+export const getCollectorStats = async (req, res) => {
+  try {
+    const d = new Date();
+    const month = d.getMonth() + 1;
+    const year = d.getFullYear();
+
+    const stats = await Donation.aggregate([
+      { $match: { month, year } },
+      { $group: { _id: '$collectedBy', totalAmount: { $sum: '$amount' }, count: { $sum: 1 } } },
+      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+      { $unwind: '$user' },
+      { $project: { _id: 1, name: '$user.name', totalAmount: 1, count: 1 } },
+      { $sort: { totalAmount: -1 } },
+      { $limit: 5 }
+    ]);
+
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

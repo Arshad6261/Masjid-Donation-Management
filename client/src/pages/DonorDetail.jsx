@@ -33,6 +33,12 @@ export default function DonorDetail() {
   const [markAmount, setMarkAmount] = useState(0);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [markNotes, setMarkNotes] = useState('');
+  
+  // Advance Donation State
+  const [advancePayModal, setAdvancePayModal] = useState(false);
+  const [advanceMonths, setAdvanceMonths] = useState(2);
+  const [advanceStartMonth, setAdvanceStartMonth] = useState(new Date().getMonth() + 1);
+  const [advanceStartYear, setAdvanceStartYear] = useState(new Date().getFullYear());
 
   const { data: donor, isLoading } = useQuery({
     queryKey: ['donor', id],
@@ -98,14 +104,28 @@ export default function DonorDetail() {
     onError: () => toast.error('भुगतान दर्ज करने में त्रुटि')
   });
 
+  const advancePayMutation = useMutation({
+    mutationFn: async (data) => {
+      return await api.post('/donations/advance', data);
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries(['donorLedger', id]);
+      queryClient.invalidateQueries(['donations']);
+      queryClient.invalidateQueries(['donorHistory', id]);
+      toast.success('अग्रिम भुगतान सफल!');
+      setAdvancePayModal(false);
+    },
+    onError: (e) => toast.error(e.response?.data?.message || 'अग्रिम भुगतान दर्ज करने में त्रुटि')
+  });
+
   useEffect(() => {
-    if (markPayModal) {
+    if (markPayModal || advancePayModal) {
       document.body.style.overflow = 'hidden';
       document.body.style.position = 'fixed';
       document.body.style.width = '100%';
     }
     return () => { document.body.style.overflow = ''; document.body.style.position = ''; document.body.style.width = ''; };
-  }, [markPayModal]);
+  }, [markPayModal, advancePayModal]);
 
   if (isLoading) return <div className="p-4 animate-pulse">लोड हो रहा है...</div>;
 
@@ -237,13 +257,27 @@ export default function DonorDetail() {
       {/* LEDGER TAB */}
       {activeTab === 'ledger' && !isNew && (
         <>
-          <div className="flex items-center gap-3">
-            {[ledgerYear - 1, ledgerYear, ledgerYear + 1].filter(y => y <= new Date().getFullYear()).map(y => (
-              <button key={y} onClick={() => { setLedgerYear(y); setSearchParams({ tab: 'ledger', year: y }); }}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${y === ledgerYear ? 'bg-dargah-green text-white shadow' : 'bg-white text-slate-600 border border-slate-200'}`}>
-                {y}
-              </button>
-            ))}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {[ledgerYear - 1, ledgerYear, ledgerYear + 1].filter(y => y <= new Date().getFullYear() + 1).map(y => (
+                <button key={y} onClick={() => { setLedgerYear(y); setSearchParams({ tab: 'ledger', year: y }); }}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${y === ledgerYear ? 'bg-dargah-green text-white shadow' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                  {y}
+                </button>
+              ))}
+            </div>
+            
+            <button 
+              onClick={() => {
+                setAdvanceStartMonth(new Date().getMonth() + 1);
+                setAdvanceStartYear(new Date().getFullYear());
+                setAdvanceMonths(2);
+                setAdvancePayModal(true);
+              }}
+              className="px-4 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-sm hover:bg-blue-700 transition-colors"
+            >
+              एक साथ कई अग्रिम भुगतान (Advance)
+            </button>
           </div>
 
           {ledger && (
@@ -284,7 +318,18 @@ export default function DonorDetail() {
                       {m.status === 'paid' && <p className="text-lg font-bold">✓ ₹{m.paidAmount}</p>}
                       {m.status === 'overpaid' && <p className="text-lg font-bold">✓ ₹{m.paidAmount} <span className="text-xs bg-blue-100 px-1 rounded">+₹{m.paidAmount - m.pledgedAmount}</span></p>}
                       {m.status === 'partial' && <p className="text-lg font-bold">₹{m.paidAmount}/{m.pledgedAmount}</p>}
-                      {m.status === 'future' && <p className="text-lg">—</p>}
+                      {m.status === 'future' && (
+                        <>
+                          <p className="text-lg">—</p>
+                          <button onClick={() => {
+                            setMarkPayModal(m);
+                            setMarkAmount(m.pledgedAmount);
+                            setMarkNotes('');
+                          }} className="mt-1 w-full py-1.5 bg-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-300 transition-colors">
+                            अग्रिम भुगतान
+                          </button>
+                        </>
+                      )}
                       {m.status === 'unpaid' && (
                         <button onClick={() => {
                           setMarkPayModal(m);
@@ -330,13 +375,64 @@ export default function DonorDetail() {
                     fundType: donor.fundType === 'both' ? 'masjid' : donor.fundType,
                     month: markPayModal.month,
                     year: ledgerYear,
-                    paymentDate: new Date(ledgerYear, markPayModal.month - 1, 28),
+                    paymentDate: new Date(),
                     collectionMethod: 'walk_in',
                     notes: markNotes
                   })}
                     disabled={markPayMutation.isPending}
                     className="flex-1 py-3 text-white font-bold rounded-xl" style={{ background: 'linear-gradient(135deg, #0F4C2A, #1B6B3A)' }}>
                     {markPayMutation.isPending ? 'सेव हो रहा है...' : 'सेव करें और रसीद बनाएं'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Advance Payment Modal */}
+          {advancePayModal && donor && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end md:items-center justify-center"
+              onMouseDown={() => setAdvancePayModal(false)}>
+              <div className="bg-white w-full max-w-md rounded-t-2xl md:rounded-2xl shadow-2xl p-6"
+                onMouseDown={(e) => e.stopPropagation()}>
+                <h3 className="text-lg font-bold text-slate-800 mb-1">एक साथ कई अग्रिम भुगतान</h3>
+                <p className="text-sm text-slate-500 mb-6">{donor.name} · मासिक: ₹{donor.monthlyAmount}</p>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">शुरुआती महीना</label>
+                      <select value={advanceStartMonth} onChange={e => setAdvanceStartMonth(Number(e.target.value))} className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none">
+                        {monthsHindi.map((m, i) => <option key={i} value={i+1}>{m}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">वर्ष</label>
+                      <input type="number" value={advanceStartYear} onChange={e => setAdvanceStartYear(Number(e.target.value))} className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">कितने महीने (2-12)?</label>
+                    <input type="number" min="2" max="12" value={advanceMonths} onChange={(e) => setAdvanceMonths(Number(e.target.value))}
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl text-xl font-bold outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
+                    <span className="text-blue-800 font-medium">कुल भुगतान:</span>
+                    <span className="text-2xl font-bold text-blue-700">₹{(donor.monthlyAmount * advanceMonths).toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-6">
+                  <button onClick={() => setAdvancePayModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-medium rounded-xl">रद्द</button>
+                  <button onClick={() => advancePayMutation.mutate({
+                    donor: donor._id,
+                    monthlyAmount: donor.monthlyAmount,
+                    fundType: donor.fundType === 'both' ? 'masjid' : donor.fundType,
+                    startMonth: advanceStartMonth,
+                    startYear: advanceStartYear,
+                    totalMonths: advanceMonths,
+                    collectionMethod: 'walk_in',
+                  })}
+                    disabled={advancePayMutation.isPending}
+                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors">
+                    {advancePayMutation.isPending ? 'सेव हो रहा है...' : 'अग्रिम भुगतान करें'}
                   </button>
                 </div>
               </div>

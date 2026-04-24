@@ -1,6 +1,20 @@
 import Donation from '../models/Donation.js';
 import Donor from '../models/Donor.js';
 
+const anonymizeDonation = (don, role) => {
+  let donation = don.toObject ? don.toObject() : { ...don };
+  if (donation.isAnonymous && role !== 'admin') {
+    if (donation.donor) {
+      donation.donor.name = 'Anonymous Donor';
+      donation.donor.phone = '';
+      donation.donor.address = '';
+    }
+    donation.walkInDonorName = 'Anonymous Donor';
+    donation.anonymized = true;
+  }
+  return donation;
+};
+
 // @desc    Get all donations
 // @route   GET /api/donations
 export const getDonations = async (req, res) => {
@@ -14,10 +28,11 @@ export const getDonations = async (req, res) => {
     if (collectedBy) query.collectedBy = collectedBy;
 
     const donations = await Donation.find(query)
-      .populate('donor', 'name phone area')
+      .populate('donor')
       .populate('collectedBy', 'name')
       .sort({ paymentDate: -1 });
-    res.json(donations);
+      
+    res.json(donations.map(d => anonymizeDonation(d, req.user?.role)));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -27,10 +42,29 @@ export const getDonations = async (req, res) => {
 // @route   POST /api/donations
 export const createDonation = async (req, res) => {
   try {
-    const { donor, amount, fundType, festivalName, month, year, paymentDate, collectionMethod, notes } = req.body;
+    const { donor, amount, fundType, festivalName, month, year, paymentDate, collectionMethod, notes, isUnknownDonor, walkInDonorName, isAnonymous } = req.body;
+    
+    let actualDonor = donor;
+    let isJummaTholi = false;
+
+    if (fundType === 'jumma_tholi' || fundType === 'jumma_jholi') {
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: 'Only admin can record Jumma Tholi.' });
+      }
+      isJummaTholi = true;
+      actualDonor = undefined;
+    } else if (isUnknownDonor) {
+      actualDonor = undefined;
+    } else if (!donor) {
+      return res.status(400).json({ message: 'Donor is required.' });
+    }
+
     const donation = new Donation({
-      donor, amount, fundType, festivalName, month, year, paymentDate, collectionMethod, notes,
-      collectedBy: req.user._id
+      donor: actualDonor, amount, fundType, festivalName, month, year, paymentDate, collectionMethod, notes,
+      collectedBy: req.user._id,
+      isJummaTholi,
+      isAnonymous: isAnonymous || false,
+      walkInDonorName: isUnknownDonor ? walkInDonorName : undefined
     });
     const createdDonation = await donation.save();
     res.status(201).json(createdDonation);
@@ -101,7 +135,7 @@ export const getDonationById = async (req, res) => {
       .populate('donor')
       .populate('collectedBy', 'name');
     if (donation) {
-      res.json(donation);
+      res.json(anonymizeDonation(donation, req.user?.role));
     } else {
       res.status(404).json({ message: 'Donation not found' });
     }
@@ -158,7 +192,7 @@ export const getDonationByReceipt = async (req, res) => {
       .populate('donor')
       .populate('collectedBy', 'name');
     if (donation) {
-      res.json(donation);
+      res.json(anonymizeDonation(donation, req.user?.role));
     } else {
       res.status(404).json({ message: 'Receipt not found' });
     }
@@ -222,6 +256,17 @@ export const getMonthlySummary = async (req, res) => {
       expected: totalExpected,
       remaining: Math.max(0, totalExpected - totalCollected)
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get list of distinct festivals
+// @route   GET /api/donations/festivals
+export const getFestivals = async (req, res) => {
+  try {
+    const festivals = await Donation.distinct('festivalName', { fundType: 'festival' });
+    res.json(festivals.filter(Boolean));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

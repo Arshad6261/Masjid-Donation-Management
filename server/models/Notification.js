@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const notificationSchema = new mongoose.Schema({
   type: { 
     type: String, 
-    enum: ['freeze', 'unfreeze', 'system', 'info'],
+    enum: ['freeze', 'unfreeze', 'system', 'info', 'qr_registration'],
     required: true
   },
   title: { type: String, required: true },

@@ -1,65 +1,100 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../api/axios';
+import { useDebounce } from 'use-debounce';
+import { MapPin } from 'lucide-react';
 
 export default function AreaInput({ value, onChange, placeholder = "क्षेत्र दर्ज करें...", error }) {
-  const [suggestions, setSuggestions] = useState([]);
   const [focused, setFocused] = useState(false);
+  const [debouncedValue] = useDebounce(value, 300);
+  const inputRef = useRef(null);
+  const [rect, setRect] = useState(null);
 
-  // Fetch unique areas
-  const { data: areas } = useQuery({
-    queryKey: ['areas'],
+  const { data: areas, isLoading } = useQuery({
+    queryKey: ['areas', debouncedValue],
     queryFn: async () => {
-      const { data } = await api.get('/donors/areas');
+      const { data } = await api.get(`/donors/areas?q=${debouncedValue || ''}`);
       return data;
     },
-    staleTime: 5 * 60 * 1000, 
   });
 
-  useEffect(() => {
-    if (areas && value) {
-      setSuggestions(
-        areas.filter(a => a.toLowerCase().includes(value.toLowerCase()) && a !== value).slice(0, 5)
-      );
-    } else {
-      setSuggestions(areas ? areas.slice(0, 5) : []);
+  const updateRect = () => {
+    if (inputRef.current) {
+      setRect(inputRef.current.getBoundingClientRect());
     }
-  }, [value, areas]);
+  };
 
-  const handleSelect = (area) => {
-    onChange(area);
+  useEffect(() => {
+    if (focused) {
+      updateRect();
+      window.addEventListener('scroll', updateRect, true);
+      window.addEventListener('resize', updateRect);
+    }
+    return () => {
+      window.removeEventListener('scroll', updateRect, true);
+      window.removeEventListener('resize', updateRect);
+    };
+  }, [focused]);
+
+  const handleSelect = (areaName) => {
+    onChange(areaName);
     setFocused(false);
   };
 
   return (
     <div className="relative">
       <input
+        ref={inputRef}
         type="text"
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => setTimeout(() => setFocused(false), 200)}
         placeholder={placeholder}
-        className={`w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-dargah-green/30 ${error ? 'border-red-300' : 'border-slate-300'}`}
+        className={`w-full px-4 py-3 border rounded-xl outline-none focus:ring-2 focus:ring-dargah-green/30 ${error ? 'border-red-300' : 'border-slate-200'} bg-white`}
         autoComplete="off"
       />
       {error && <p className="text-sm text-red-500 mt-1">{error.message || error}</p>}
 
-      {focused && suggestions.length > 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 shadow-lg rounded-lg overflow-hidden max-h-48 overflow-y-auto">
-          {suggestions.map((area, i) => (
+      {focused && rect && createPortal(
+        <div 
+          className="fixed z-[99999] bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden max-h-56 overflow-y-auto"
+          style={{
+            top: rect.bottom + 4,
+            left: rect.left,
+            width: rect.width
+          }}
+        >
+          {isLoading && <div className="p-3 text-sm text-slate-500">खोज रहा है...</div>}
+          {!isLoading && areas?.length === 0 && (
+             <div 
+               onMouseDown={(e) => { e.preventDefault(); handleSelect(value); }}
+               className="px-4 py-3 hover:bg-slate-50 cursor-pointer text-sm text-slate-700"
+             >
+               नया क्षेत्र: <strong>{value}</strong>
+             </div>
+          )}
+          {!isLoading && areas?.map((area, i) => (
             <div
               key={i}
               onMouseDown={(e) => {
                 e.preventDefault();
-                handleSelect(area);
+                handleSelect(area.name);
               }}
-              className="px-4 py-2 hover:bg-slate-50 cursor-pointer text-sm text-slate-700"
+              className="px-4 py-3 hover:bg-slate-50 cursor-pointer text-sm flex items-center justify-between border-b border-slate-50 last:border-0"
             >
-              {area}
+              <div className="flex items-center gap-2 text-slate-800 font-medium">
+                <MapPin className="w-4 h-4 text-slate-400" />
+                {area.name}
+              </div>
+              <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">
+                {area.count}
+              </span>
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

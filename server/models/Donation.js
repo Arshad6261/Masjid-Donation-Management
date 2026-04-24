@@ -13,7 +13,10 @@ const donationSchema = new mongoose.Schema({
   collectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   collectionMethod: { type: String, enum: ['house_visit', 'walk_in', 'bank_transfer'], default: 'walk_in' },
   notes: { type: String },
+  isAnonymous: { type: Boolean, default: false },
   receiptPrinted: { type: Boolean, default: false },
+  walkInDonorName: { type: String },
+  isJummaTholi: { type: Boolean, default: false },
   
   // Feature 2: Advance Donation Fields
   isAdvance: { type: Boolean, default: false },
@@ -27,14 +30,26 @@ donationSchema.pre('save', async function() {
     const d = new Date(this.paymentDate || Date.now());
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const counterId = `receiptNo-${yyyy}${mm}`;
+    const dd = String(d.getDate()).padStart(2, '0');
+    
+    let prefix = `RCP-`;
+    let counterId = `receiptNo-${yyyy}${mm}`;
+    let format = `${yyyy}${mm}`;
+
+    if (this.isJummaTholi) {
+      prefix = `RCP-JT-`;
+      counterId = `receiptNo-JT-${yyyy}${mm}${dd}`;
+      format = `${yyyy}${mm}${dd}`;
+    } else if (!this.donor) {
+      prefix = `RCP-WI-`;
+    }
 
     const counter = await Counter.findByIdAndUpdate(
       { _id: counterId },
       { $inc: { seq: 1 } },
       { returnDocument: 'after', upsert: true }
     );
-    this.receiptNo = `RCP-${yyyy}${mm}-${counter.seq.toString().padStart(3, '0')}`;
+    this.receiptNo = `${prefix}${format}-${counter.seq.toString().padStart(3, '0')}`;
   }
 });
 

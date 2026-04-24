@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Wallet, TrendingUp, HandCoins, Building2, Map, Plus } from 'lucide-react';
+import { Wallet, TrendingUp, HandCoins, Building2, Map, Plus, Calendar, Trophy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
@@ -19,6 +19,17 @@ export default function Dashboard() {
   const { data: chartData } = useQuery({
     queryKey: ['chart'],
     queryFn: async () => { const { data } = await api.get(`/reports/monthly?year=${new Date().getFullYear()}`); return data; }
+  });
+
+  const { data: upcomingEvents } = useQuery({
+    queryKey: ['upcomingEvents'],
+    queryFn: async () => { const { data } = await api.get('/events/upcoming'); return data; }
+  });
+
+  const { data: topCollectors } = useQuery({
+    queryKey: ['topCollectors'],
+    queryFn: async () => { const { data } = await api.get('/reports/collector-stats'); return data; },
+    enabled: isAdmin
   });
 
   if (isLoading) {
@@ -85,37 +96,93 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard title="मस्जिद फंड" amount={dashboard?.funds?.masjid || 0} borderColor="border-l-[#1B6B3A]" icon={<Building2 className="w-6 h-6"/>} iconBg="bg-green-50 text-green-700" />
         <StatCard title="दरगाह फंड" amount={dashboard?.funds?.dargah || 0} borderColor="border-l-[#C9900C]" icon={<HandCoins className="w-6 h-6"/>} iconBg="bg-amber-50 text-amber-600" />
-        <StatCard title="त्यौहार फंड" amount={dashboard?.funds?.festival || 0} borderColor="border-l-[#0D7E6A]" icon={<Wallet className="w-6 h-6"/>} iconBg="bg-blue-50 text-blue-600" />
-        <StatCard title="जुम्मा झोली" amount={dashboard?.funds?.jumma_jholi || 0} borderColor="border-l-[#8B5CF6]" icon={<HandCoins className="w-6 h-6"/>} iconBg="bg-purple-50 text-purple-600" />
+        <StatCard title="त्यौहार फंड" amount={dashboard?.funds?.festival || 0} borderColor="border-l-[#0D7E6A]" icon={<Wallet className="w-6 h-6"/>} iconBg="bg-blue-50 text-blue-600" onClick={() => navigate('/festival-fund')} />
+        <StatCard title="जुम्मा झोली" amount={dashboard?.funds?.jumma_jholi || 0} borderColor="border-l-[#8B5CF6]" icon={<HandCoins className="w-6 h-6"/>} iconBg="bg-purple-50 text-purple-600" onClick={() => navigate('/jumma-tholi')} />
         <StatCard title="तामीरी काम" amount={dashboard?.funds?.tamiri_kaam || 0} borderColor="border-l-[#F97316]" icon={<Building2 className="w-6 h-6"/>} iconBg="bg-orange-50 text-orange-600" />
         {isAdmin && <StatCard title="इस माह खर्चे" amount={dashboard?.thisMonthExpense || 0} borderColor="border-l-red-500" icon={<TrendingUp className="w-6 h-6"/>} iconBg="bg-red-50 text-red-600" />}
       </div>
 
-      {/* Chart */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-        <h3 className="text-lg font-bold text-slate-800 mb-6">चंदा रुझान (पिछले 6 महीने)</h3>
-        <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={formattedChart} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748B', fontSize: 12}} dy={10} />
-              <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748B', fontSize: 12}} />
-              <Tooltip cursor={{fill: '#F1F5F9'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
-              <Legend iconType="circle" wrapperStyle={{fontSize: '12px', paddingTop: '20px'}} />
-              <Bar dataKey="मस्जिद" fill="#1B6B3A" radius={[4, 4, 0, 0]} barSize={12} />
-              <Bar dataKey="दरगाह" fill="#C9900C" radius={[4, 4, 0, 0]} barSize={12} />
-              <Bar dataKey="त्यौहार" fill="#0D7E6A" radius={[4, 4, 0, 0]} barSize={12} />
-            </BarChart>
-          </ResponsiveContainer>
+      {/* Charts and Leaderboard */}
+      <div className={`grid grid-cols-1 ${isAdmin ? 'lg:grid-cols-3' : ''} gap-6`}>
+        {/* Chart */}
+        <div className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-5 ${isAdmin ? 'lg:col-span-2' : ''}`}>
+          <h3 className="text-lg font-bold text-slate-800 mb-6">चंदा रुझान (पिछले 6 महीने)</h3>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={formattedChart} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748B', fontSize: 12}} dy={10} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748B', fontSize: 12}} />
+                <Tooltip cursor={{fill: '#F1F5F9'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                <Legend iconType="circle" wrapperStyle={{fontSize: '12px', paddingTop: '20px'}} />
+                <Bar dataKey="मस्जिद" fill="#1B6B3A" radius={[4, 4, 0, 0]} barSize={12} />
+                <Bar dataKey="दरगाह" fill="#C9900C" radius={[4, 4, 0, 0]} barSize={12} />
+                <Bar dataKey="त्यौहार" fill="#0D7E6A" radius={[4, 4, 0, 0]} barSize={12} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
+
+        {/* Top Collectors Leaderboard */}
+        {isAdmin && topCollectors && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-amber-500" /> टॉप कलेक्टर्स (इस माह)
+            </h3>
+            <div className="space-y-4">
+              {topCollectors.map((c, i) => (
+                <div key={c._id} className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${i === 0 ? 'bg-amber-100 text-amber-700' : i === 1 ? 'bg-slate-100 text-slate-700' : i === 2 ? 'bg-orange-100 text-orange-800' : 'bg-slate-50 text-slate-500'}`}>
+                    {i + 1}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-bold text-sm text-slate-800">{c.name}</p>
+                    <p className="text-xs text-slate-500">{c.count} रसीदें</p>
+                  </div>
+                  <div className="font-bold text-dargah-green text-sm">₹{c.totalAmount.toLocaleString('en-IN')}</div>
+                </div>
+              ))}
+              {topCollectors.length === 0 && <p className="text-sm text-slate-500">इस महीने कोई चंदा नहीं।</p>}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Upcoming Events */}
+      {upcomingEvents?.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-dargah-green" /> आगामी कार्यक्रम (Upcoming Events)
+            </h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {upcomingEvents.map(ev => (
+              <div key={ev._id} className="border border-slate-200 rounded-xl p-4 hover:border-dargah-green transition-colors cursor-pointer" onClick={() => alert(`Title: ${ev.title}\nDate: ${new Date(ev.date).toLocaleDateString('hi-IN')}\nLocation: ${ev.location}\nDescription: ${ev.description || 'No description'}`)}>
+                <div className="flex justify-between items-start mb-2">
+                  <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                    ev.fundType === 'masjid' ? 'bg-green-100 text-green-800' :
+                    ev.fundType === 'dargah' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                  }`}>{ev.fundType}</span>
+                  <span className="text-xs font-bold text-slate-500">{new Date(ev.date).toLocaleDateString('hi-IN')}</span>
+                </div>
+                <h4 className="font-bold text-slate-800">{ev.title}</h4>
+                <p className="text-sm text-slate-500 mt-1 flex items-center gap-1"><Map className="w-3 h-3" /> {ev.location}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function StatCard({ title, amount, borderColor, icon, iconBg }) {
+function StatCard({ title, amount, borderColor, icon, iconBg, onClick }) {
   return (
-    <div className={`bg-white rounded-2xl shadow-sm border border-slate-100 border-l-4 ${borderColor} p-4 flex flex-col justify-between`}>
+    <div 
+      onClick={onClick}
+      className={`bg-white rounded-2xl shadow-sm border border-slate-100 border-l-4 ${borderColor} p-4 flex flex-col justify-between ${onClick ? 'cursor-pointer hover:shadow-md hover:bg-slate-50 transition-all' : ''}`}
+    >
       <div className={`p-2 rounded-xl w-fit ${iconBg} mb-3`}>{icon}</div>
       <div>
         <h4 className="text-slate-500 text-sm font-medium mb-1">{title}</h4>

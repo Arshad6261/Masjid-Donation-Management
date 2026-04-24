@@ -1,15 +1,22 @@
 import Donor from '../models/Donor.js';
 import Donation from '../models/Donation.js';
+import Notification from '../models/Notification.js';
+import QRCode from 'qrcode';
 
 // @desc    Get all donors (area-scoped)
 // @route   GET /api/donors
 export const getDonors = async (req, res) => {
   try {
-    const { area, fundType, isActive, search } = req.query;
+    const { area, fundType, isActive, search, pending } = req.query;
     let query = { ...req.areaFilter };
     if (area) query.area = area;
     if (fundType) query.fundType = fundType;
     if (isActive !== undefined) query.isActive = isActive === 'true';
+    if (pending === 'true') {
+      query.pendingApproval = true;
+    } else {
+      query.pendingApproval = { $ne: true };
+    }
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -24,12 +31,21 @@ export const getDonors = async (req, res) => {
   }
 };
 
-// @desc    Get all distinct areas from donors
+// @desc    Get all distinct areas from donors with donor count
 // @route   GET /api/donors/areas
 export const getDonorAreas = async (req, res) => {
   try {
-    const areas = await Donor.distinct('area');
-    res.json(areas.sort());
+    const q = req.query.q || '';
+    const pipeline = [];
+    if (q) {
+      pipeline.push({ $match: { area: { $regex: new RegExp(q, 'i') } } });
+    }
+    pipeline.push({ $group: { _id: '$area', count: { $sum: 1 } } });
+    pipeline.push({ $sort: { _id: 1 } });
+    
+    const areas = await Donor.aggregate(pipeline);
+    
+    res.json(areas.map(a => ({ name: a._id, count: a.count })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -77,14 +93,98 @@ export const updateDonor = async (req, res) => {
   }
 };
 
-// @desc    Delete (soft deactivate) donor
+// @desc    Delete a donor
+// @route   DELETE /api/donors/:id
 export const deleteDonor = async (req, res) => {
   try {
     const donor = await Donor.findById(req.params.id);
     if (!donor) return res.status(404).json({ message: 'Donor not found' });
+    
+    // Soft delete
     donor.isActive = false;
     await donor.save();
-    res.json({ message: 'Donor deactivated' });
+    
+    res.json({ message: 'Donor removed' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Self-register donor via QR
+// @route   POST /api/donors/self-register
+export const selfRegister = async (req, res) => {
+  try {
+    const { name, phone, houseNo, street, area, fundType, monthlyAmount, notes } = req.body;
+    
+    if (!name || name.length < 2) return res.status(400).json({ message: 'Name is required' });
+    if (!phone || !/^[6-9]\d{9}$/.test(phone)) return res.status(400).json({ message: 'Valid phone number is required (e.g. 9876543210)' });
+    if (!area) return res.status(400).json({ message: 'Area is required' });
+    if (!fundType || !['masjid', 'dargah', 'both'].includes(fundType)) return res.status(400).json({ message: 'Fund type is required' });
+
+    const exists = await Donor.findOne({ phone });
+    if (exists) {
+      return res.status(409).json({ error: 'PHONE_EXISTS', message: 'A donor with this phone is already registered' });
+    }
+
+    const donor = new Donor({
+      name, phone, address: { houseNo, street, area }, area, fundType, 
+      monthlyAmount: monthlyAmount || 0,
+      isActive: true,
+      pendingApproval: true,
+      registrationSource: 'qr_code'
+    });
+    
+    const createdDonor = await donor.save();
+
+    await Notification.create({
+      type: 'qr_registration',
+      title: 'New QR Registration',
+      message: `New donor registration from QR code — ${name} from ${area}`,
+    });
+
+    res.status(201).json({ message: 'Registration successful', donorId: createdDonor.donorId });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Generate QR Code for registration
+// @route   GET /api/donors/qr-code
+export const generateQRCode = async (req, res) => {
+  try {
+    const domain = process.env.CLIENT_URL || 'http://localhost:5173';
+    const registrationUrl = `${domain}/register`;
+    const qrDataUrl = await QRCode.toDataURL(registrationUrl, { width: 400 });
+    res.json({ qrDataUrl, registrationUrl });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Approve donor
+// @route   PATCH /api/donors/:id/approve
+export const approveDonor = async (req, res) => {
+  try {
+    const donor = await Donor.findById(req.params.id);
+    if (!donor) return res.status(404).json({ message: 'Donor not found' });
+    donor.pendingApproval = false;
+    await donor.save();
+    res.json(donor);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Reject donor
+// @route   PATCH /api/donors/:id/reject
+export const rejectDonor = async (req, res) => {
+  try {
+    const donor = await Donor.findById(req.params.id);
+    if (!donor) return res.status(404).json({ message: 'Donor not found' });
+    donor.pendingApproval = false;
+    donor.isActive = false;
+    await donor.save();
+    res.json(donor);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -95,6 +195,7 @@ export const getDonorDonationHistory = async (req, res) => {
   try {
     const donations = await Donation.find({ donor: req.params.id })
       .populate('collectedBy', 'name')
+      .populate('donor')
       .sort({ paymentDate: -1 });
     res.json(donations);
   } catch (error) {

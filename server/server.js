@@ -15,6 +15,7 @@ import reportRoutes from './routes/reportRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import eventRoutes from './routes/eventRoutes.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 
 dotenv.config();
@@ -57,6 +58,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/events', eventRoutes);
 
 app.get('/', (req, res) => {
   res.send('Masjid & Dargah API is running...');

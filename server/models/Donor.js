@@ -14,6 +14,8 @@ const donorSchema = new mongoose.Schema({
   fundType: { type: String, enum: ['masjid', 'dargah', 'both'], required: true },
   monthlyAmount: { type: Number, required: true },
   isActive: { type: Boolean, default: true },
+  pendingApproval: { type: Boolean, default: false },
+  registrationSource: { type: String, enum: ['manual', 'qr_code', 'walk_in'], default: 'manual' },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
 

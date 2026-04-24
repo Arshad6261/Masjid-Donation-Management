@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
-import { Users, Plus, X, Shield, MapPin, Power, PowerOff } from 'lucide-react';
+import { Users, Plus, X, Shield, MapPin, Power, PowerOff, QrCode, Download, Printer, CheckCircle, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const AREAS = ['Qasim Nagar', 'Sultan Nagar', 'Peer Colony', 'Shah Gali', 'Dargah Road', 'Masjid Lane'];
@@ -10,6 +10,7 @@ const AREAS = ['Qasim Nagar', 'Sultan Nagar', 'Peer Colony', 'Shah Gali', 'Darga
 export default function SettingsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState('system');
   const [showModal, setShowModal] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', assignedAreas: [], role: 'member' });
@@ -25,6 +26,18 @@ export default function SettingsPage() {
     queryKey: ['users'],
     queryFn: async () => { const { data } = await api.get('/users'); return data; },
     enabled: user?.role === 'admin'
+  });
+
+  const { data: pendingDonors } = useQuery({
+    queryKey: ['pendingDonors'],
+    queryFn: async () => { const { data } = await api.get('/donors?pending=true'); return data; },
+    enabled: user?.role === 'admin' && activeTab === 'qr'
+  });
+
+  const { data: qrData } = useQuery({
+    queryKey: ['qrCode'],
+    queryFn: async () => { const { data } = await api.get('/donors/qr-code'); return data; },
+    enabled: user?.role === 'admin' && activeTab === 'qr'
   });
 
   useEffect(() => {
@@ -66,6 +79,28 @@ export default function SettingsPage() {
     },
     onError: (e) => toast.error(e.response?.data?.message || 'त्रुटि')
   });
+
+  const removeMutation = useMutation({
+    mutationFn: async (id) => {
+      const { data } = await api.delete(`/users/${id}`);
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries(['users']);
+      if (data.deactivated) {
+        toast.success(`सदस्य निष्क्रिय (Inactive)। ${data.donationCount} चंदे जुड़े हैं।`);
+      } else if (data.deleted) {
+        toast.success('सदस्य सफलतापूर्वक हटा दिया गया।');
+      }
+    },
+    onError: (e) => toast.error(e.response?.data?.message || 'हटाने में त्रुटि')
+  });
+
+  const handleRemove = (m) => {
+    if (window.confirm(`क्या आप वाकई ${m.name} को हटाना चाहते हैं?`)) {
+      removeMutation.mutate(m._id);
+    }
+  };
 
   const openAdd = () => {
     setEditUser(null);
@@ -114,8 +149,17 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      
-      {/* System Controls */}
+      <div className="flex border-b border-slate-200">
+        <button onClick={() => setActiveTab('system')} className={`px-6 py-3 font-bold text-sm ${activeTab === 'system' ? 'border-b-2 border-dargah-green text-dargah-green' : 'text-slate-500'}`}>System & Team</button>
+        <button onClick={() => setActiveTab('qr')} className={`px-6 py-3 font-bold text-sm flex items-center gap-2 ${activeTab === 'qr' ? 'border-b-2 border-dargah-green text-dargah-green' : 'text-slate-500'}`}>
+          QR Registration
+          {pendingDonors?.length > 0 && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{pendingDonors.length} Pending</span>}
+        </button>
+      </div>
+
+      {activeTab === 'system' && (
+        <>
+          {/* System Controls */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
           <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -207,7 +251,14 @@ export default function SettingsPage() {
                     </div>
                   </td>
                   <td className="py-4 px-6"><span className={`px-2 py-1 rounded-full text-xs font-bold ${m.isActive ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{m.isActive ? 'सक्रिय' : 'निष्क्रिय'}</span></td>
-                  <td className="py-4 px-6"><button onClick={() => openEdit(m)} className="text-sm text-dargah-green font-medium hover:underline">बदलें</button></td>
+                  <td className="py-4 px-6 flex gap-3">
+                    <button onClick={() => openEdit(m)} className="text-sm text-dargah-green font-medium hover:underline">बदलें</button>
+                    {m.isActive ? (
+                      <button onClick={() => handleRemove(m)} className="text-sm text-red-600 font-medium hover:underline flex items-center gap-1">हटाएं</button>
+                    ) : (
+                      <button onClick={() => updateMutation.mutate({ id: m._id, isActive: true })} className="text-sm text-blue-600 font-medium hover:underline flex items-center gap-1">सक्रिय करें</button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -268,6 +319,108 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      </>)}
+
+      {activeTab === 'qr' && (
+        <QRRegistrationTab qrData={qrData} pendingDonors={pendingDonors} queryClient={queryClient} />
+      )}
+    </div>
+  );
+}
+
+function QRRegistrationTab({ qrData, pendingDonors, queryClient }) {
+  const approveMutation = useMutation({
+    mutationFn: async (id) => await api.patch(`/donors/${id}/approve`),
+    onSuccess: () => { queryClient.invalidateQueries(['pendingDonors']); toast.success('Donor approved!'); },
+    onError: () => toast.error('Error approving donor')
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async (id) => await api.patch(`/donors/${id}/reject`),
+    onSuccess: () => { queryClient.invalidateQueries(['pendingDonors']); toast.success('Donor rejected'); },
+    onError: () => toast.error('Error rejecting donor')
+  });
+
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head><title>Print QR Code</title></head>
+        <body style="text-align: center; font-family: sans-serif; padding: 50px;">
+          <h2>Hazrat Sultan Sha Peer</h2>
+          <h3>Scan to Register as a Donor</h3>
+          <img src="${qrData?.qrDataUrl}" style="width: 300px; margin: 20px 0;" />
+          <p>Or visit: ${qrData?.registrationUrl}</p>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 500);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col md:flex-row gap-8 items-center">
+        {qrData ? (
+          <>
+            <div className="shrink-0 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center">
+              <img src={qrData.qrDataUrl} alt="Registration QR Code" className="w-48 h-48 mx-auto" />
+              <p className="text-xs text-slate-500 mt-2 font-mono break-all w-48">{qrData.registrationUrl}</p>
+            </div>
+            <div className="flex-1 space-y-4 text-center md:text-left">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Public Registration QR</h3>
+                <p className="text-slate-500 mt-1">Print and display this QR code at the masjid notice board or dargah entrance. Visitors can scan it to self-register as donors.</p>
+              </div>
+              <div className="flex flex-wrap justify-center md:justify-start gap-3">
+                <a href={qrData.qrDataUrl} download="Masjid_Donor_QR.png" className="flex items-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-medium transition-colors">
+                  <Download className="w-5 h-5" /> Download PNG
+                </a>
+                <button onClick={handlePrint} className="flex items-center gap-2 px-5 py-2.5 bg-dargah-green hover:bg-dargah-green-dark text-white rounded-xl font-medium transition-colors">
+                  <Printer className="w-5 h-5" /> Print QR
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="p-8 text-slate-500 w-full text-center">Loading QR Code...</p>
+        )}
+      </div>
+
+      <h3 className="text-xl font-bold text-slate-800 mt-8 mb-4 flex items-center gap-2">
+        <Users className="w-5 h-5 text-dargah-green" /> Pending Approvals ({pendingDonors?.length || 0})
+      </h3>
+      
+      {pendingDonors?.length === 0 ? (
+        <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-10 text-center text-slate-500">
+          No pending donor registrations at this time.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {pendingDonors?.map(d => (
+            <div key={d._id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+              <div className="absolute top-0 right-0 bg-blue-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg">QR Registration</div>
+              <h4 className="font-bold text-slate-800 text-lg mt-2">{d.name}</h4>
+              <p className="text-sm font-mono text-slate-600 my-1">{d.phone}</p>
+              <div className="text-sm text-slate-500 space-y-1 mb-4">
+                <p><MapPin className="inline w-3 h-3" /> {d.area} ({d.address?.houseNo ? d.address.houseNo + ', ' : ''}{d.address?.street || ''})</p>
+                <p>Fund: <strong>{d.fundType}</strong></p>
+                {d.monthlyAmount > 0 && <p>Commitment: <strong>₹{d.monthlyAmount}</strong></p>}
+                <p className="text-xs mt-2 text-slate-400">Reg: {new Date(d.createdAt).toLocaleString()}</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => approveMutation.mutate(d._id)} disabled={approveMutation.isPending} className="flex-1 bg-green-50 hover:bg-green-100 text-green-700 font-bold py-2 rounded-xl flex items-center justify-center gap-1 transition-colors">
+                  <CheckCircle className="w-4 h-4" /> Approve
+                </button>
+                <button onClick={() => rejectMutation.mutate(d._id)} disabled={rejectMutation.isPending} className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 font-bold py-2 rounded-xl flex items-center justify-center gap-1 transition-colors">
+                  <XCircle className="w-4 h-4" /> Reject
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
