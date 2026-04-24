@@ -4,6 +4,7 @@ import api from '../api/axios';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
 import { Printer, AlertTriangle, Download, Receipt, Calendar, Users, TrendingUp, Wallet, Trophy, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Link } from 'react-router-dom';
 
 const monthsHindi = ['जनवरी','फरवरी','मार्च','अप्रैल','मई','जून','जुलाई','अगस्त','सितम्बर','अक्टूबर','नवम्बर','दिसम्बर'];
 const monthsShort = ['जन','फर','मार्च','अप्रै','मई','जून','जुला','अग','सित','अक्टू','नव','दिस'];
@@ -88,7 +89,10 @@ export default function Reports() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 no-print">
         <h2 className="text-xl font-bold text-slate-800">वित्तीय रिपोर्ट</h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Link to="/reports/collectors" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-medium shadow-sm transition-colors">
+            <Users className="w-5 h-5" /> कलेक्टर प्रदर्शन
+          </Link>
           <button onClick={handleCSV} className="flex items-center gap-2 bg-dargah-green hover:bg-dargah-green-dark text-white px-4 py-2 rounded-xl font-medium shadow-sm transition-colors">
             <Download className="w-5 h-5" /> CSV
           </button>

@@ -1,6 +1,23 @@
 /**
  * Feature 5: WhatsApp Integration utility
+ * Updated for Indian phone number normalization
  */
+
+export const normalizeIndianPhone = (phone) => {
+  if (!phone) return null;
+  let p = phone.replace(/\D/g, '');
+  if (p.length === 10 && /^[6-9]/.test(p)) return p;
+  if (p.length === 11 && p.startsWith('0')) return p.substring(1);
+  if (p.length === 12 && p.startsWith('91')) return p.substring(2);
+  if (p.length === 13 && p.startsWith('091')) return p.substring(3);
+  return null;
+};
+
+export const formatPhoneDisplay = (phone) => {
+  const normalized = normalizeIndianPhone(phone);
+  if (!normalized) return phone || '';
+  return `+91 ${normalized.substring(0, 5)} ${normalized.substring(5)}`;
+};
 
 export const getWhatsAppLink = (donor, donation) => {
   const fundLabels = { masjid: 'मस्जिद', dargah: 'दरगाह', festival: 'त्यौहार', jumma_jholi: 'जुम्मा झोली', tamiri_kaam: 'तामीरी काम' };
@@ -14,16 +31,10 @@ export const getWhatsAppLink = (donor, donation) => {
   const encodedText = encodeURIComponent(text);
 
   if (donor?.phone) {
-    // Strip non-digits safely
-    let p = donor.phone.replace(/\\D/g, '');
-    
-    // If Pakistani format starting with 03, replace with 923 // or if Indian 10 digits add 91
-    if (p.startsWith('03')) {
-      p = '92' + p.substring(1);
-    } else if (p.length === 10) {
-      p = '91' + p; // Assume Indian for default 10-digit
+    const normalized = normalizeIndianPhone(donor.phone);
+    if (normalized) {
+      return `https://wa.me/91${normalized}?text=${encodedText}`;
     }
-    return `https://wa.me/${p}?text=${encodedText}`;
   }
   
   // Generic fallback if no phone

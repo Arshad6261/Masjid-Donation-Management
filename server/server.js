@@ -16,6 +16,7 @@ import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import eventRoutes from './routes/eventRoutes.js';
+import smsRoutes from './routes/smsRoutes.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 
 dotenv.config();
@@ -32,6 +33,22 @@ connectDB().then(async () => {
         value: { isFrozen: false, reason: '', frozenAt: null }
       });
       console.log('Seeded default SystemSettings');
+    }
+    // Seed SMS settings
+    const smsExists = await SystemSetting.findOne({ key: 'smsSettings' });
+    if (!smsExists) {
+      await SystemSetting.create({
+        key: 'smsSettings',
+        value: {
+          enabled: true,
+          sendOnDonation: true,
+          sendOnlyIfNoWhatsApp: true,
+          whatsAppFallbackEnabled: true,
+          smsBalance: null,
+          balanceLastChecked: null
+        }
+      });
+      console.log('Seeded SMS settings');
     }
   } catch (error) {
     console.error('Failed to seed SystemSettings:', error);
@@ -59,6 +76,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api/sms', smsRoutes);
 
 app.get('/', (req, res) => {
   res.send('Masjid & Dargah API is running...');

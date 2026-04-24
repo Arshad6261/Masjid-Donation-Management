@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
-import { Users, Plus, X, Shield, MapPin, Power, PowerOff, QrCode, Download, Printer, CheckCircle, XCircle } from 'lucide-react';
+import { Users, Plus, X, Shield, MapPin, Power, PowerOff, QrCode, Download, Printer, CheckCircle, XCircle, Send, RefreshCw, MessageSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const AREAS = ['Qasim Nagar', 'Sultan Nagar', 'Peer Colony', 'Shah Gali', 'Dargah Road', 'Masjid Lane'];
@@ -149,11 +149,14 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex border-b border-slate-200">
-        <button onClick={() => setActiveTab('system')} className={`px-6 py-3 font-bold text-sm ${activeTab === 'system' ? 'border-b-2 border-dargah-green text-dargah-green' : 'text-slate-500'}`}>System & Team</button>
-        <button onClick={() => setActiveTab('qr')} className={`px-6 py-3 font-bold text-sm flex items-center gap-2 ${activeTab === 'qr' ? 'border-b-2 border-dargah-green text-dargah-green' : 'text-slate-500'}`}>
+      <div className="flex border-b border-slate-200 overflow-x-auto">
+        <button onClick={() => setActiveTab('system')} className={`px-6 py-3 font-bold text-sm whitespace-nowrap ${activeTab === 'system' ? 'border-b-2 border-dargah-green text-dargah-green' : 'text-slate-500'}`}>System & Team</button>
+        <button onClick={() => setActiveTab('qr')} className={`px-6 py-3 font-bold text-sm flex items-center gap-2 whitespace-nowrap ${activeTab === 'qr' ? 'border-b-2 border-dargah-green text-dargah-green' : 'text-slate-500'}`}>
           QR Registration
           {pendingDonors?.length > 0 && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{pendingDonors.length} Pending</span>}
+        </button>
+        <button onClick={() => setActiveTab('sms')} className={`px-6 py-3 font-bold text-sm flex items-center gap-2 whitespace-nowrap ${activeTab === 'sms' ? 'border-b-2 border-dargah-green text-dargah-green' : 'text-slate-500'}`}>
+          <MessageSquare className="w-4 h-4" /> SMS & Notifications
         </button>
       </div>
 
@@ -326,6 +329,10 @@ export default function SettingsPage() {
       {activeTab === 'qr' && (
         <QRRegistrationTab qrData={qrData} pendingDonors={pendingDonors} queryClient={queryClient} />
       )}
+
+      {activeTab === 'sms' && (
+        <SMSSettingsTab />
+      )}
     </div>
   );
 }
@@ -423,6 +430,156 @@ function QRRegistrationTab({ qrData, pendingDonors, queryClient }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function SMSSettingsTab() {
+  const [testPhone, setTestPhone] = useState('');
+  const [logPage, setLogPage] = useState(1);
+
+  const { data: smsSettings, refetch: refetchSettings } = useQuery({
+    queryKey: ['smsSettings'],
+    queryFn: async () => { const { data } = await api.get('/sms/settings'); return data; }
+  });
+
+  const { data: smsStats } = useQuery({
+    queryKey: ['smsStats'],
+    queryFn: async () => { const { data } = await api.get('/sms/stats'); return data; }
+  });
+
+  const { data: smsLogs, refetch: refetchLogs } = useQuery({
+    queryKey: ['smsLogs', logPage],
+    queryFn: async () => { const { data } = await api.get(`/sms/logs?page=${logPage}`); return data; }
+  });
+
+  const testMutation = useMutation({
+    mutationFn: async (phone) => { const { data } = await api.post('/sms/test', { phone }); return data; },
+    onSuccess: (data) => {
+      if (data.success) toast.success('Test SMS sent!');
+      else toast.error(data.error || 'Failed to send test SMS');
+    },
+    onError: (e) => toast.error(e.response?.data?.message || 'Error')
+  });
+
+  const settingsMutation = useMutation({
+    mutationFn: async (settings) => { const { data } = await api.put('/sms/settings', settings); return data; },
+    onSuccess: () => { refetchSettings(); toast.success('Settings saved'); },
+    onError: () => toast.error('Failed to save settings')
+  });
+
+  const [localSettings, setLocalSettings] = useState(null);
+  React.useEffect(() => {
+    if (smsSettings && !localSettings) setLocalSettings(smsSettings);
+  }, [smsSettings]);
+
+  return (
+    <div className="space-y-6">
+      {/* SMS Gateway & Test */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <Send className="w-5 h-5 text-blue-600" /> SMS Gateway
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="bg-slate-50 rounded-xl p-4">
+            <p className="text-xs text-slate-500 uppercase font-medium">Gateway Status</p>
+            <p className="text-sm font-medium text-slate-700 mt-1">{smsSettings?.enabled ? '✅ Active' : '❌ Disabled'}</p>
+          </div>
+          <div className="bg-slate-50 rounded-xl p-4">
+            <p className="text-xs text-slate-500 uppercase font-medium mb-2">Test SMS</p>
+            <div className="flex gap-2">
+              <input type="text" value={testPhone} onChange={e => setTestPhone(e.target.value)}
+                className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none" placeholder="9876543210" />
+              <button onClick={() => testMutation.mutate(testPhone)} disabled={testMutation.isPending || !testPhone}
+                className="px-3 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg disabled:opacity-50">
+                {testMutation.isPending ? '...' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Behavior Toggles */}
+      {localSettings && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+          <h3 className="text-lg font-bold text-slate-800 mb-4">Behavior Settings</h3>
+          <div className="space-y-4">
+            {[
+              { key: 'enabled', label: 'SMS Enabled (Master Switch)' },
+              { key: 'sendOnDonation', label: 'Auto-send on new donation' },
+              { key: 'sendOnlyIfNoWhatsApp', label: 'SMS only for donors without WhatsApp' },
+              { key: 'whatsAppFallbackEnabled', label: 'WhatsApp fallback button enabled' }
+            ].map(({ key, label }) => (
+              <label key={key} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl cursor-pointer">
+                <span className="text-sm font-medium text-slate-700">{label}</span>
+                <input type="checkbox" checked={localSettings[key] || false}
+                  onChange={e => setLocalSettings({ ...localSettings, [key]: e.target.checked })}
+                  className="w-5 h-5 text-dargah-green rounded" />
+              </label>
+            ))}
+          </div>
+          <button onClick={() => settingsMutation.mutate(localSettings)} disabled={settingsMutation.isPending}
+            className="mt-4 px-5 py-2.5 bg-dargah-green text-white font-bold rounded-xl">
+            {settingsMutation.isPending ? 'Saving...' : 'Save Settings'}
+          </button>
+        </div>
+      )}
+
+      {/* Stats */}
+      {smsStats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="bg-white rounded-xl p-4 border-l-4 border-green-500 shadow-sm">
+            <p className="text-xs text-slate-500 uppercase">SMS Sent</p>
+            <p className="text-2xl font-bold text-green-700 mt-1">{smsStats.sent}</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border-l-4 border-red-500 shadow-sm">
+            <p className="text-xs text-slate-500 uppercase">SMS Failed</p>
+            <p className="text-2xl font-bold text-red-600 mt-1">{smsStats.failed}</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border-l-4 border-blue-500 shadow-sm">
+            <p className="text-xs text-slate-500 uppercase">Success Rate</p>
+            <p className="text-2xl font-bold text-blue-700 mt-1">{smsStats.successRate}%</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border-l-4 border-dargah-gold shadow-sm">
+            <p className="text-xs text-slate-500 uppercase">Est. Cost</p>
+            <p className="text-2xl font-bold text-dargah-gold mt-1">₹{smsStats.estimatedCost}</p>
+          </div>
+        </div>
+      )}
+
+      {/* SMS Logs */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+          <h3 className="text-lg font-bold text-slate-800">SMS Log</h3>
+          <span className="text-xs text-slate-500">{smsLogs?.total || 0} total</span>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {smsLogs?.logs?.length === 0 && (
+            <p className="p-8 text-center text-slate-500">No SMS logs yet.</p>
+          )}
+          {smsLogs?.logs?.map(log => (
+            <div key={log._id} className="px-6 py-3 flex flex-col sm:flex-row sm:items-center gap-2 text-sm">
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-slate-800 truncate">{log.donorId?.name || log.phone}</p>
+                <p className="text-xs text-slate-500">{new Date(log.createdAt).toLocaleString('hi-IN')} · {log.donationId?.receiptNo || '-'}</p>
+              </div>
+              <span className={`px-2 py-1 rounded-full text-xs font-bold ${log.status === 'sent' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                {log.status === 'sent' ? '✓ Sent' : '✗ Failed'}
+              </span>
+            </div>
+          ))}
+        </div>
+        {smsLogs?.pages > 1 && (
+          <div className="px-6 py-3 border-t border-slate-100 flex gap-2 justify-center">
+            {Array.from({ length: smsLogs.pages }, (_, i) => (
+              <button key={i} onClick={() => setLogPage(i + 1)}
+                className={`px-3 py-1 rounded-lg text-sm font-medium ${logPage === i + 1 ? 'bg-dargah-green text-white' : 'bg-slate-100 text-slate-600'}`}>
+                {i + 1}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

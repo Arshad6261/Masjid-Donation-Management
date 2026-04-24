@@ -1,5 +1,7 @@
 import Donation from '../models/Donation.js';
 import Donor from '../models/Donor.js';
+import SystemSetting from '../models/SystemSetting.js';
+import * as smsService from '../services/smsService.js';
 
 const anonymizeDonation = (don, role) => {
   let donation = don.toObject ? don.toObject() : { ...don };
@@ -67,6 +69,30 @@ export const createDonation = async (req, res) => {
       walkInDonorName: isUnknownDonor ? walkInDonorName : undefined
     });
     const createdDonation = await donation.save();
+
+    // Auto-trigger SMS (fire-and-forget, non-blocking)
+    if (actualDonor) {
+      (async () => {
+        try {
+          const smsSetting = await SystemSetting.findOne({ key: 'smsSettings' });
+          if (smsSetting?.value?.enabled && smsSetting?.value?.sendOnDonation) {
+            const pop = await Donation.findById(createdDonation._id)
+              .populate('donor', 'name phone hasWhatsApp preferSMS')
+              .populate('collectedBy', 'name');
+            const d = pop.donor;
+            const shouldSend = d?.phone && (
+              d.preferSMS ||
+              d.hasWhatsApp === false ||
+              !smsSetting.value.sendOnlyIfNoWhatsApp
+            );
+            if (shouldSend) {
+              await smsService.sendDonationReceiptSMS(pop);
+            }
+          }
+        } catch (e) { console.error('SMS auto-trigger error:', e); }
+      })();
+    }
+
     res.status(201).json(createdDonation);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -122,6 +148,42 @@ export const createAdvanceDonation = async (req, res) => {
       groupId: advanceGroupId,
       donations: createdDonations 
     });
+
+    // Fire-and-forget: send ONE batch SMS for advance
+    (async () => {
+      try {
+        const smsSetting = await SystemSetting.findOne({ key: 'smsSettings' });
+        if (smsSetting?.value?.enabled && smsSetting?.value?.sendOnDonation) {
+          const pop = await Donation.findById(createdDonations[0]._id)
+            .populate('donor', 'name phone hasWhatsApp preferSMS');
+          const d = pop?.donor;
+          const shouldSend = d?.phone && (
+            d.preferSMS ||
+            d.hasWhatsApp === false ||
+            !smsSetting.value.sendOnlyIfNoWhatsApp
+          );
+          if (shouldSend) {
+            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            let endMonth = parseInt(startMonth) + parseInt(totalMonths) - 1;
+            let endYear = parseInt(startYear);
+            while (endMonth > 12) { endMonth -= 12; endYear++; }
+            const msg = smsService.buildAdvanceSmsMessage({
+              donorName: d.name,
+              totalMonths,
+              startMonth: monthNames[parseInt(startMonth) - 1],
+              endMonth: monthNames[endMonth - 1],
+              totalAmount: monthlyAmount * totalMonths,
+              firstReceiptNo: createdDonations[0].receiptNo
+            });
+            await smsService.sendSMS({
+              phone: d.phone, message: msg,
+              donationId: createdDonations[0]._id,
+              donorId: d._id, type: 'donation_receipt'
+            });
+          }
+        }
+      } catch (e) { console.error('Advance SMS error:', e); }
+    })();
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -18,7 +18,9 @@ const schema = z.object({
   area: z.string().min(1, 'क्षेत्र ज़रूरी है'),
   fundType: z.enum(['masjid', 'dargah', 'both']),
   monthlyAmount: z.number().min(1, 'राशि 0 से ज़्यादा होनी चाहिए'),
-  isActive: z.boolean()
+  isActive: z.boolean(),
+  hasWhatsApp: z.boolean().optional(),
+  preferSMS: z.boolean().optional()
 });
 
 export default function DonorDetail() {
@@ -58,10 +60,12 @@ export default function DonorDetail() {
     enabled: !isNew && activeTab === 'ledger'
   });
 
-  const { register, handleSubmit, reset, control, formState: { errors } } = useForm({
+  const { register, handleSubmit, reset, control, watch, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
-    defaultValues: { address: { houseNo: '', street: '' }, fundType: 'masjid', isActive: true, monthlyAmount: 0 }
+    defaultValues: { address: { houseNo: '', street: '' }, fundType: 'masjid', isActive: true, monthlyAmount: 0, hasWhatsApp: true, preferSMS: false }
   });
+
+  const phoneVal = watch('phone');
 
   useEffect(() => {
     if (donor && !isNew) {
@@ -69,7 +73,9 @@ export default function DonorDetail() {
         name: donor.name, phone: donor.phone || '',
         address: donor.address || { houseNo: '', street: '' },
         area: donor.area, fundType: donor.fundType,
-        monthlyAmount: donor.monthlyAmount, isActive: donor.isActive
+        monthlyAmount: donor.monthlyAmount, isActive: donor.isActive,
+        hasWhatsApp: donor.hasWhatsApp !== false,
+        preferSMS: donor.preferSMS || false
       });
     }
   }, [donor, isNew, reset]);
@@ -168,7 +174,16 @@ export default function DonorDetail() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">फोन</label>
-                  <input type="text" {...register('phone')} className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-dargah-green/30" />
+                  <div className="flex">
+                    <span className="inline-flex items-center px-3 bg-slate-100 border border-r-0 border-slate-300 rounded-l-lg text-sm font-bold text-slate-600">+91</span>
+                    <input type="text" {...register('phone')} className="w-full px-4 py-2 border border-slate-300 rounded-r-lg outline-none focus:ring-2 focus:ring-dargah-green/30" placeholder="9876543210" />
+                  </div>
+                  {phoneVal && !/^[6-9]\d{9}$/.test(phoneVal) && phoneVal.length > 0 && (
+                    <p className="text-sm text-red-500 mt-1">कृपया सही 10 अंक का मोबाइल नंबर दर्ज करें</p>
+                  )}
+                  {!phoneVal && (
+                    <p className="text-xs text-amber-600 mt-1">⚠ फोन नहीं — SMS और WhatsApp काम नहीं करेगा</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">क्षेत्र *</label>
@@ -213,6 +228,17 @@ export default function DonorDetail() {
                     <label htmlFor="isActive" className="ml-2 text-sm text-slate-900">सक्रिय</label>
                   </div>
                 )}
+                <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                  <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">संचार प्राथमिकता</p>
+                  <div className="flex items-center gap-3">
+                    <input type="checkbox" {...register('hasWhatsApp')} id="hasWhatsApp" className="w-4 h-4 text-green-600 rounded" />
+                    <label htmlFor="hasWhatsApp" className="text-sm text-slate-700">यह दानदाता WhatsApp का उपयोग करता है</label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input type="checkbox" {...register('preferSMS')} id="preferSMS" className="w-4 h-4 text-blue-600 rounded" />
+                    <label htmlFor="preferSMS" className="text-sm text-slate-700">SMS को WhatsApp पर प्राथमिकता दें</label>
+                  </div>
+                </div>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t">
                 <button type="button" onClick={() => navigate('/donors')} className="px-5 py-2.5 text-slate-600 bg-slate-100 rounded-lg font-medium">रद्द करें</button>

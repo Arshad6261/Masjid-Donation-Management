@@ -1,13 +1,36 @@
-import React, { useRef } from 'react';
-import { Printer, MessageCircle, X } from 'lucide-react';
-import { getWhatsAppLink } from '../utils/whatsapp';
+import React, { useRef, useState } from 'react';
+import { Printer, MessageCircle, X, Send, Loader2, CheckCircle2 } from 'lucide-react';
+import { getWhatsAppLink, formatPhoneDisplay } from '../utils/whatsapp';
+import api from '../api/axios';
+import toast from 'react-hot-toast';
 
 export default function ReceiptModal({ donation, onClose }) {
   const printRef = useRef(null);
+  const [smsStatus, setSmsStatus] = useState('idle'); // idle, loading, sent, failed
 
   const handlePrint = () => {
-    // Basic approach: simply print the window, ensuring classes like `print:block` work
     window.print();
+  };
+
+  const handleSendSMS = async () => {
+    if (!donation?._id) return;
+    setSmsStatus('loading');
+    try {
+      const { data } = await api.post('/sms/send-receipt', { donationId: donation._id });
+      if (data.alreadySent) {
+        toast('SMS पहले से भेजा जा चुका है', { icon: 'ℹ️' });
+        setSmsStatus('sent');
+      } else if (data.success) {
+        toast.success('SMS सफलतापूर्वक भेजा गया!');
+        setSmsStatus('sent');
+      } else {
+        toast.error(data.error || 'SMS भेजने में त्रुटि');
+        setSmsStatus('failed');
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'SMS भेजने में त्रुटि');
+      setSmsStatus('failed');
+    }
   };
 
   const monthsHindi = ['जनवरी','फरवरी','मार्च','अप्रैल','मई','जून','जुलाई','अगस्त','सितम्बर','अक्टूबर','नवम्बर','दिसम्बर'];
@@ -17,8 +40,9 @@ export default function ReceiptModal({ donation, onClose }) {
   if (!donation) return null;
 
   const whatsappLink = getWhatsAppLink(donation.donor, donation);
-
   const donorName = donation.donor?.name || donation.donorName || donation.walkInDonorName || 'गुमनाम';
+  const donorPhone = donation.donor?.phone;
+  const hasWhatsApp = donation.donor?.hasWhatsApp !== false;
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white" onMouseDown={onClose}>
@@ -36,7 +60,7 @@ export default function ReceiptModal({ donation, onClose }) {
         {/* Action Buttons */}
         <div className="absolute top-4 right-4 flex gap-2 sm:gap-3 no-print z-10">
           <a target="_blank" rel="noopener noreferrer" href={whatsappLink} className="flex items-center gap-1.5 bg-[#25D366] text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-medium shadow-sm hover:bg-[#20bd5a] transition-colors text-sm sm:text-base">
-            <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" /> शेयर
+            <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" /> WhatsApp
           </a>
           <button onClick={handlePrint} className="flex items-center gap-1.5 bg-slate-800 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-medium shadow-sm hover:bg-slate-900 transition-colors text-sm sm:text-base">
             <Printer className="w-4 h-4 sm:w-5 sm:h-5" /> प्रिंट
@@ -112,6 +136,44 @@ export default function ReceiptModal({ donation, onClose }) {
                 }
               </span>
             </p>
+          </div>
+
+          {/* SMS / Communication Section (no-print) */}
+          <div className="no-print mb-8 bg-slate-50 rounded-xl p-4 border border-slate-200">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              {donorPhone && (
+                <div className="text-sm text-slate-600">
+                  📞 <span className="font-mono font-medium">{formatPhoneDisplay(donorPhone)}</span>
+                  {!hasWhatsApp && <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full">SMS Only</span>}
+                </div>
+              )}
+              <div className="flex gap-2 ml-auto">
+                <button
+                  onClick={handleSendSMS}
+                  disabled={smsStatus === 'loading' || smsStatus === 'sent' || !donorPhone}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                    smsStatus === 'sent' ? 'bg-green-100 text-green-700' :
+                    smsStatus === 'failed' ? 'bg-red-100 text-red-700 hover:bg-red-200' :
+                    smsStatus === 'loading' ? 'bg-blue-100 text-blue-700' :
+                    !donorPhone ? 'bg-slate-100 text-slate-400 cursor-not-allowed' :
+                    'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                  title={!donorPhone ? 'दानदाता का फोन नंबर नहीं है' : ''}
+                >
+                  {smsStatus === 'loading' && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {smsStatus === 'sent' && <CheckCircle2 className="w-4 h-4" />}
+                  {smsStatus === 'failed' && <Send className="w-4 h-4" />}
+                  {smsStatus === 'idle' && <Send className="w-4 h-4" />}
+                  {smsStatus === 'sent' ? '✓ SMS भेजा गया' : smsStatus === 'failed' ? 'पुनः प्रयास' : smsStatus === 'loading' ? 'भेज रहे हैं...' : 'SMS भेजें'}
+                </button>
+              </div>
+            </div>
+            {!donorPhone && (
+              <p className="text-xs text-amber-600 mt-2">⚠ दानदाता का फोन नंबर नहीं है — SMS और WhatsApp नहीं भेजा जा सकता</p>
+            )}
+            {donorPhone && !hasWhatsApp && (
+              <p className="text-xs text-slate-500 mt-2">यह दानदाता WhatsApp का उपयोग नहीं करता</p>
+            )}
           </div>
 
           {/* Footer */}

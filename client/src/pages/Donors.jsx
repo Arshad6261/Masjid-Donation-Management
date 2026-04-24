@@ -73,6 +73,17 @@ export default function Donors() {
                 <div className="space-y-2 mb-3">
                   <div className="flex items-center text-sm text-slate-600 gap-2">
                     <Phone className="w-4 h-4 text-slate-400" /> {donor.phone || 'नहीं'}
+                    {donor.phone ? (
+                      donor.hasWhatsApp === false ? (
+                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full">SMS</span>
+                      ) : donor.preferSMS ? (
+                        <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-bold rounded-full">SMS+WA</span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full">WA</span>
+                      )
+                    ) : (
+                      <span className="px-1.5 py-0.5 bg-slate-100 text-slate-400 text-[10px] font-bold rounded-full">—</span>
+                    )}
                   </div>
                   <div className="flex items-center text-sm text-slate-600 gap-2">
                     <MapPin className="w-4 h-4 text-slate-400" /> {donor.area}

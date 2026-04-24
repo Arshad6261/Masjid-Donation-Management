@@ -14,6 +14,7 @@ import AddExpenditure from './pages/AddExpenditure';
 import Visits from './pages/Visits';
 import VisitDetail from './pages/VisitDetail';
 import Reports from './pages/Reports';
+import CollectorPerformance from './pages/CollectorPerformance';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import ReceiptSearch from './pages/ReceiptSearch';
@@ -46,6 +47,8 @@ function App() {
         <Route path="visits" element={<Visits />} />
         <Route path="visits/:id" element={<VisitDetail />} />
         <Route path="reports" element={<Reports />} />
+        <Route path="reports/collectors" element={<CollectorPerformance />} />
+        <Route path="reports/collectors/:userId" element={<CollectorPerformance />} />
         <Route path="festival-fund" element={<FestivalFund />} />
         <Route path="jumma-tholi" element={<JummaTholi />} />
         <Route path="settings" element={<Settings />} />

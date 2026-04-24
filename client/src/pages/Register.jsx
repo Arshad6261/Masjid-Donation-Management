@@ -5,7 +5,7 @@ import { CheckCircle2, AlertCircle } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
   withCredentials: true,
 });
 
@@ -50,7 +50,7 @@ export default function Register() {
     if (!form.name || form.name.length < 2) return setErrorMsg('नाम दर्ज करें (कम से कम 2 अक्षर)');
     if (!/^[6-9]\d{9}$/.test(form.phone)) return setErrorMsg('कृपया सही फोन नंबर दर्ज करें (उदा. 9876543210)');
     if (!form.area) return setErrorMsg('मोहल्ला / क्षेत्र चुनना आवश्यक है');
-    
+
     mutation.mutate({
       ...form,
       monthlyAmount: Number(form.monthlyAmount) || 0
@@ -97,43 +97,43 @@ export default function Register() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-1">पूरा नाम *</label>
-              <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all" placeholder="अपना नाम दर्ज करें" required />
+              <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all" placeholder="अपना नाम दर्ज करें" required />
             </div>
 
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-1">फोन नंबर *</label>
-              <input type="tel" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all" placeholder="9876543210" required />
+              <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all" placeholder="9876543210" required />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">मकान नंबर</label>
-                <input type="text" value={form.houseNo} onChange={e => setForm({...form, houseNo: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all" placeholder="वैकल्पिक" />
+                <input type="text" value={form.houseNo} onChange={e => setForm({ ...form, houseNo: e.target.value })} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all" placeholder="वैकल्पिक" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">गली / सड़क</label>
-                <input type="text" value={form.street} onChange={e => setForm({...form, street: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all" placeholder="वैकल्पिक" />
+                <input type="text" value={form.street} onChange={e => setForm({ ...form, street: e.target.value })} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all" placeholder="वैकल्पिक" />
               </div>
             </div>
 
             <div className="relative">
               <label className="block text-sm font-bold text-slate-700 mb-1">मोहल्ला / क्षेत्र *</label>
-              <input 
-                type="text" 
-                value={areaSearch} 
-                onChange={e => { setAreaSearch(e.target.value); setForm({...form, area: e.target.value}); setShowAreaDropdown(true); }}
+              <input
+                type="text"
+                value={areaSearch}
+                onChange={e => { setAreaSearch(e.target.value); setForm({ ...form, area: e.target.value }); setShowAreaDropdown(true); }}
                 onFocus={() => setShowAreaDropdown(true)}
                 onBlur={() => setTimeout(() => setShowAreaDropdown(false), 200)}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all" 
-                placeholder="क्षेत्र का नाम दर्ज करें" 
-                required 
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all"
+                placeholder="क्षेत्र का नाम दर्ज करें"
+                required
               />
               {showAreaDropdown && areas?.length > 0 && (
                 <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 shadow-xl rounded-xl max-h-48 overflow-y-auto">
                   {areas.map(a => (
-                    <div 
-                      key={a.name} 
-                      onClick={() => { setForm({...form, area: a.name}); setAreaSearch(a.name); setShowAreaDropdown(false); }}
+                    <div
+                      key={a.name}
+                      onClick={() => { setForm({ ...form, area: a.name }); setAreaSearch(a.name); setShowAreaDropdown(false); }}
                       className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
                     >
                       <span className="font-medium text-slate-800">{a.name}</span>
@@ -151,9 +151,9 @@ export default function Register() {
                   { id: 'dargah', label: 'दरगाह' },
                   { id: 'both', label: 'दोनों' }
                 ].map(type => (
-                  <button 
-                    key={type.id} type="button" 
-                    onClick={() => setForm({...form, fundType: type.id})}
+                  <button
+                    key={type.id} type="button"
+                    onClick={() => setForm({ ...form, fundType: type.id })}
                     className={`py-3 px-2 rounded-xl text-sm font-bold capitalize transition-all border ${form.fundType === type.id ? 'bg-dargah-green text-white border-dargah-green shadow-md shadow-dargah-green/20' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
                   >
                     {type.label}
@@ -166,13 +166,13 @@ export default function Register() {
               <label className="block text-sm font-bold text-slate-700 mb-1">मासिक राशि जो मैं दे सकता हूँ</label>
               <div className="relative">
                 <span className="absolute left-4 top-3.5 text-slate-400 font-bold">₹</span>
-                <input type="number" value={form.monthlyAmount} onChange={e => setForm({...form, monthlyAmount: e.target.value})} className="w-full pl-8 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all" placeholder="यदि निश्चित नहीं हैं तो 0 छोड़ दें" />
+                <input type="number" value={form.monthlyAmount} onChange={e => setForm({ ...form, monthlyAmount: e.target.value })} className="w-full pl-8 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all" placeholder="यदि निश्चित नहीं हैं तो 0 छोड़ दें" />
               </div>
             </div>
 
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-1">टिप्पणी (वैकल्पिक)</label>
-              <textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all resize-none" rows="2" placeholder="समिति के लिए कोई संदेश..." />
+              <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dargah-green outline-none transition-all resize-none" rows="2" placeholder="समिति के लिए कोई संदेश..." />
             </div>
           </div>
 

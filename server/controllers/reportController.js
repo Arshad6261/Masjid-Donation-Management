@@ -1,6 +1,8 @@
 import Donation from '../models/Donation.js';
 import Expenditure from '../models/Expenditure.js';
 import Donor from '../models/Donor.js';
+import User from '../models/User.js';
+import HouseVisit from '../models/HouseVisit.js';
 
 // @desc    Get dashboard metrics (totals)
 // @route   GET /api/reports/dashboard
@@ -309,21 +311,250 @@ export const getFestivalSummary = async (req, res) => {
 // @route   GET /api/reports/collector-stats
 export const getCollectorStats = async (req, res) => {
   try {
-    const d = new Date();
-    const month = d.getMonth() + 1;
-    const year = d.getFullYear();
+    const currentDate = new Date();
+    const month = parseInt(req.query.month) || (currentDate.getMonth() + 1);
+    const year = parseInt(req.query.year) || currentDate.getFullYear();
 
-    const stats = await Donation.aggregate([
-      { $match: { month, year } },
-      { $group: { _id: '$collectedBy', totalAmount: { $sum: '$amount' }, count: { $sum: 1 } } },
-      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
-      { $unwind: '$user' },
-      { $project: { _id: 1, name: '$user.name', totalAmount: 1, count: 1 } },
-      { $sort: { totalAmount: -1 } },
-      { $limit: 5 }
+    const collectors = req.user.role === 'admin'
+      ? await User.find({ role: 'member', isActive: true }).select('_id name assignedAreas')
+      : await User.find({ _id: req.user._id, isActive: true }).select('_id name assignedAreas');
+
+    const results = [];
+
+    for (const collector of collectors) {
+      const collectorId = collector._id;
+
+      const donationsThisMonth = await Donation.find({ collectedBy: collectorId, month, year })
+        .populate('donor', 'monthlyAmount')
+        .select('amount donor');
+
+      const uniqueDonorIds = [...new Set(
+        donationsThisMonth
+          .filter((d) => d.donor?._id)
+          .map((d) => d.donor._id.toString())
+      )];
+
+      let expectedAmount = 0;
+      const expectedFromVisits = await HouseVisit.aggregate([
+        { $match: { collectedBy: collectorId, month, year } },
+        { $unwind: '$donorsVisited' },
+        { $group: { _id: '$donorsVisited.donor', pledged: { $first: '$donorsVisited.pledgedAmount' } } },
+        { $group: { _id: null, total: { $sum: '$pledged' } } }
+      ]);
+
+      if (expectedFromVisits.length) {
+        expectedAmount = expectedFromVisits[0].total || 0;
+      } else {
+        expectedAmount = donationsThisMonth.reduce((sum, d) => sum + (d.donor?.monthlyAmount || 0), 0);
+      }
+
+      const visitsCompleted = await HouseVisit.countDocuments({
+        collectedBy: collectorId,
+        month,
+        year,
+        status: 'completed'
+      });
+
+      const totalCollected = donationsThisMonth.reduce((sum, d) => sum + d.amount, 0);
+      const collectionRate = expectedAmount > 0 ? Math.round((totalCollected / expectedAmount) * 100) : 0;
+
+      const trend = [];
+      for (let offset = 5; offset >= 0; offset--) {
+        const tDate = new Date(year, month - 1 - offset, 1);
+        const tMonth = tDate.getMonth() + 1;
+        const tYear = tDate.getFullYear();
+        const monthName = tDate.toLocaleString('en-US', { month: 'short' });
+
+        const tDonations = await Donation.find({ collectedBy: collectorId, month: tMonth, year: tYear })
+          .populate('donor', 'monthlyAmount')
+          .select('amount donor');
+
+        const tCollected = tDonations.reduce((sum, d) => sum + d.amount, 0);
+        let tExpected = 0;
+
+        const tExpectedFromVisits = await HouseVisit.aggregate([
+          { $match: { collectedBy: collectorId, month: tMonth, year: tYear } },
+          { $unwind: '$donorsVisited' },
+          { $group: { _id: '$donorsVisited.donor', pledged: { $first: '$donorsVisited.pledgedAmount' } } },
+          { $group: { _id: null, total: { $sum: '$pledged' } } }
+        ]);
+
+        if (tExpectedFromVisits.length) {
+          tExpected = tExpectedFromVisits[0].total || 0;
+        } else {
+          tExpected = tDonations.reduce((sum, d) => sum + (d.donor?.monthlyAmount || 0), 0);
+        }
+
+        trend.push({
+          month: tMonth,
+          year: tYear,
+          monthName,
+          collected: tCollected,
+          expected: tExpected,
+          rate: tExpected > 0 ? Math.round((tCollected / tExpected) * 100) : 0
+        });
+      }
+
+      results.push({
+        collector: {
+          _id: collector._id,
+          name: collector.name,
+          assignedAreas: collector.assignedAreas || []
+        },
+        thisMonth: {
+          donorsVisited: uniqueDonorIds.length,
+          totalCollected,
+          expectedAmount,
+          collectionRate,
+          donationCount: donationsThisMonth.length,
+          visitsCompleted
+        },
+        trend
+      });
+    }
+
+    results.sort((a, b) => b.thisMonth.collectionRate - a.thisMonth.collectionRate);
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get detailed collector stats for one user
+// @route   GET /api/reports/collector-stats/:userId
+export const getCollectorStatsByUser = async (req, res) => {
+  try {
+    const currentDate = new Date();
+    const month = parseInt(req.query.month) || (currentDate.getMonth() + 1);
+    const year = parseInt(req.query.year) || currentDate.getFullYear();
+    const { userId } = req.params;
+
+    const collector = await User.findById(userId).select('_id name assignedAreas role isActive');
+    if (!collector) return res.status(404).json({ message: 'Collector not found' });
+    if (collector.role !== 'member') return res.status(400).json({ message: 'User is not a committee member' });
+
+    const donationsThisMonth = await Donation.find({ collectedBy: collector._id, month, year })
+      .populate('donor', 'name phone area monthlyAmount')
+      .select('amount donor paymentDate receiptNo collectionMethod notes');
+
+    const uniqueDonorIds = [...new Set(
+      donationsThisMonth
+        .filter((d) => d.donor?._id)
+        .map((d) => d.donor._id.toString())
+    )];
+
+    let expectedAmount = 0;
+    const expectedFromVisits = await HouseVisit.aggregate([
+      { $match: { collectedBy: collector._id, month, year } },
+      { $unwind: '$donorsVisited' },
+      { $group: { _id: '$donorsVisited.donor', pledged: { $first: '$donorsVisited.pledgedAmount' } } },
+      { $group: { _id: null, total: { $sum: '$pledged' } } }
     ]);
+    if (expectedFromVisits.length) expectedAmount = expectedFromVisits[0].total || 0;
+    else expectedAmount = donationsThisMonth.reduce((sum, d) => sum + (d.donor?.monthlyAmount || 0), 0);
 
-    res.json(stats);
+    const visitsCompleted = await HouseVisit.countDocuments({
+      collectedBy: collector._id,
+      month,
+      year,
+      status: 'completed'
+    });
+
+    const totalCollected = donationsThisMonth.reduce((sum, d) => sum + d.amount, 0);
+    const collectionRate = expectedAmount > 0 ? Math.round((totalCollected / expectedAmount) * 100) : 0;
+
+    const trend = [];
+    for (let offset = 5; offset >= 0; offset--) {
+      const tDate = new Date(year, month - 1 - offset, 1);
+      const tMonth = tDate.getMonth() + 1;
+      const tYear = tDate.getFullYear();
+      const monthName = tDate.toLocaleString('en-US', { month: 'short' });
+
+      const tDonations = await Donation.find({ collectedBy: collector._id, month: tMonth, year: tYear })
+        .populate('donor', 'monthlyAmount')
+        .select('amount donor');
+      const tCollected = tDonations.reduce((sum, d) => sum + d.amount, 0);
+
+      const tExpectedFromVisits = await HouseVisit.aggregate([
+        { $match: { collectedBy: collector._id, month: tMonth, year: tYear } },
+        { $unwind: '$donorsVisited' },
+        { $group: { _id: '$donorsVisited.donor', pledged: { $first: '$donorsVisited.pledgedAmount' } } },
+        { $group: { _id: null, total: { $sum: '$pledged' } } }
+      ]);
+
+      const tExpected = tExpectedFromVisits.length
+        ? (tExpectedFromVisits[0].total || 0)
+        : tDonations.reduce((sum, d) => sum + (d.donor?.monthlyAmount || 0), 0);
+
+      trend.push({
+        month: tMonth,
+        year: tYear,
+        monthName,
+        collected: tCollected,
+        expected: tExpected,
+        rate: tExpected > 0 ? Math.round((tCollected / tExpected) * 100) : 0
+      });
+    }
+
+    const monthVisits = await HouseVisit.find({ collectedBy: collector._id, month, year })
+      .populate('donorsVisited.donor', 'name phone area monthlyAmount')
+      .select('visitDate area status totalPledged totalCollected donorsVisited');
+
+    const donorsCollected = donationsThisMonth.map((d) => ({
+      donor: d.donor ? {
+        _id: d.donor._id,
+        name: d.donor.name,
+        phone: d.donor.phone,
+        area: d.donor.area,
+        monthlyAmount: d.donor.monthlyAmount
+      } : null,
+      amount: d.amount,
+      paymentDate: d.paymentDate,
+      receiptNo: d.receiptNo,
+      collectionMethod: d.collectionMethod,
+      notes: d.notes || ''
+    }));
+
+    const donorsSkipped = [];
+    monthVisits.forEach((visit) => {
+      visit.donorsVisited.forEach((entry) => {
+        if (entry.skipped) {
+          donorsSkipped.push({
+            donor: entry.donor ? {
+              _id: entry.donor._id,
+              name: entry.donor.name,
+              phone: entry.donor.phone,
+              area: entry.donor.area,
+              monthlyAmount: entry.donor.monthlyAmount
+            } : null,
+            visitDate: visit.visitDate,
+            area: visit.area,
+            skipReason: entry.skipReason || 'other',
+            notes: entry.notes || ''
+          });
+        }
+      });
+    });
+
+    res.json({
+      collector: {
+        _id: collector._id,
+        name: collector.name,
+        assignedAreas: collector.assignedAreas || []
+      },
+      thisMonth: {
+        donorsVisited: uniqueDonorIds.length,
+        totalCollected,
+        expectedAmount,
+        collectionRate,
+        donationCount: donationsThisMonth.length,
+        visitsCompleted
+      },
+      trend,
+      donorsCollected,
+      donorsSkipped,
+      houseVisits: monthVisits
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

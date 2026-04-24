@@ -27,9 +27,23 @@ export default function Dashboard() {
   });
 
   const { data: topCollectors } = useQuery({
-    queryKey: ['topCollectors'],
-    queryFn: async () => { const { data } = await api.get('/reports/collector-stats'); return data; },
+    queryKey: ['collectorStatsDashboard', new Date().getMonth() + 1, new Date().getFullYear()],
+    queryFn: async () => {
+      const now = new Date();
+      const { data } = await api.get(`/reports/collector-stats?month=${now.getMonth() + 1}&year=${now.getFullYear()}`);
+      return data;
+    },
     enabled: isAdmin
+  });
+
+  const { data: myCollectorStats } = useQuery({
+    queryKey: ['myCollectorStatsDashboard', user?._id, new Date().getMonth() + 1, new Date().getFullYear()],
+    queryFn: async () => {
+      const now = new Date();
+      const { data } = await api.get(`/reports/collector-stats?month=${now.getMonth() + 1}&year=${now.getFullYear()}`);
+      return data?.[0] || null;
+    },
+    enabled: !isAdmin
   });
 
   if (isLoading) {
@@ -53,6 +67,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+
       {/* Member area banner */}
       {!isAdmin && user?.assignedAreas?.length > 0 && (
         <div className="bg-dargah-cream border border-dargah-gold/20 rounded-xl p-4 flex items-center gap-3">
@@ -130,16 +145,16 @@ export default function Dashboard() {
               <Trophy className="w-5 h-5 text-amber-500" /> टॉप कलेक्टर्स (इस माह)
             </h3>
             <div className="space-y-4">
-              {topCollectors.map((c, i) => (
-                <div key={c._id} className="flex items-center gap-3">
+              {topCollectors.slice(0, 5).map((c, i) => (
+                <div key={c.collector._id} className="flex items-center gap-3">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${i === 0 ? 'bg-amber-100 text-amber-700' : i === 1 ? 'bg-slate-100 text-slate-700' : i === 2 ? 'bg-orange-100 text-orange-800' : 'bg-slate-50 text-slate-500'}`}>
                     {i + 1}
                   </div>
                   <div className="flex-1">
-                    <p className="font-bold text-sm text-slate-800">{c.name}</p>
-                    <p className="text-xs text-slate-500">{c.count} रसीदें</p>
+                    <p className="font-bold text-sm text-slate-800">{c.collector.name}</p>
+                    <p className="text-xs text-slate-500">{c.thisMonth.donationCount} रसीदें • {c.thisMonth.collectionRate}% दर</p>
                   </div>
-                  <div className="font-bold text-dargah-green text-sm">₹{c.totalAmount.toLocaleString('en-IN')}</div>
+                  <div className="font-bold text-dargah-green text-sm">₹{c.thisMonth.totalCollected.toLocaleString('en-IN')}</div>
                 </div>
               ))}
               {topCollectors.length === 0 && <p className="text-sm text-slate-500">इस महीने कोई चंदा नहीं।</p>}
@@ -147,6 +162,48 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {isAdmin && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-amber-500" />
+              इस माह के शीर्ष कलेक्टर्स
+            </h3>
+            <button onClick={() => navigate('/reports/collectors')} className="text-sm font-semibold text-dargah-green hover:text-dargah-green-dark">
+              सभी देखें
+            </button>
+          </div>
+          <div className="space-y-3">
+            {(topCollectors || []).slice(0, 3).map((c, index) => (
+              <div key={c.collector._id} className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3">
+                <div>
+                  <p className="font-semibold text-slate-800">#{index + 1} {c.collector.name}</p>
+                  <p className="text-xs text-slate-500">दर: {c.thisMonth.collectionRate}%</p>
+                </div>
+                <p className="font-bold text-dargah-green">₹{c.thisMonth.totalCollected.toLocaleString('en-IN')}</p>
+              </div>
+            ))}
+            {(topCollectors || []).length === 0 && <p className="text-sm text-slate-500">इस महीने के लिए कलेक्टर डेटा उपलब्ध नहीं है।</p>}
+          </div>
+        </div>
+      )}
+
+      {!isAdmin && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-slate-800">इस माह आपके आंकड़े</h3>
+            <button onClick={() => navigate('/reports/collectors')} className="text-sm font-semibold text-dargah-green hover:text-dargah-green-dark">
+              पूरा देखें
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <MiniMetric label="वसूली" value={`₹${(myCollectorStats?.thisMonth?.totalCollected || 0).toLocaleString('en-IN')}`} />
+            <MiniMetric label="दर" value={`${myCollectorStats?.thisMonth?.collectionRate || 0}%`} />
+            <MiniMetric label="दौरे" value={myCollectorStats?.thisMonth?.visitsCompleted || 0} />
+          </div>
+        </div>
+      )}
 
       {/* Upcoming Events */}
       {upcomingEvents?.length > 0 && (
@@ -173,6 +230,15 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }) {
+  return (
+    <div className="rounded-xl border border-slate-200 px-4 py-3 bg-slate-50">
+      <p className="text-xs font-medium text-slate-500 uppercase">{label}</p>
+      <p className="text-lg font-bold text-slate-800 mt-1">{value}</p>
     </div>
   );
 }
